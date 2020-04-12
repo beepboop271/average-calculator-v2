@@ -3,8 +3,6 @@ require("dotenv-safe").config();
 import rp from "request-promise-native";
 import { CookieJar } from "request";
 
-const output: string[] = [];
-
 const TA_LOGIN_URL: string = "https://ta.yrdsb.ca/yrdsb/index.php";
 const TA_COURSE_BASE_URL: string = "https://ta.yrdsb.ca/live/students/viewReport.php";
 const TA_ID_REGEX: RegExp = /<a href="viewReport.php\?subject_id=([0-9]+)&student_id=([0-9]+)">/;
@@ -402,18 +400,18 @@ function mergeFromInto(taCourse: Course, localCourse: Course): void {
     // Course.PRESENT: do nothing
     if (status == Course.NOT_PRESENT) {
       localCourse.addAssessment(taAssessment);
-      output.push(`added ${taAssessment.name} to ${localCourse.name}`);
+      console.log(`added ${taAssessment.name} to ${localCourse.name}`);
     } else if (typeof status != "number") {
       // Course.PRESENT_BUT_DIFFERENT
       (<Assessment>status).copyFrom(taAssessment);
-      output.push(`updated ${taAssessment.name}`);
+      console.log(`updated ${taAssessment.name}`);
     }
   }
 
   for (let i: number = 0, len: number = localCourse.assessments.length; i < len; ++i) {
     status = taCourse.hasAssessment(localCourse.assessments[i]);
     if (status == Course.NOT_PRESENT) {
-      output.push(`removed ${localCourse.assessments[i].name}`);
+      console.log(`removed ${localCourse.assessments[i].name}`);
       localCourse.removeAssessment(i);
     }
   }
@@ -442,7 +440,7 @@ function mergeCourseLists(
 
   for (const name of taNames) {
     if (!localNames.has(name)) {
-      output.push(`added ${name} to local courses`);
+      console.log(`added ${name} to local courses`);
       localCourses.push(taMap.get(name)!);
     }
   }
@@ -455,7 +453,7 @@ function mergeCourseLists(
 }
 
 async function getFromTa(auth: IAuthMap): Promise<Course[]> {
-  output.push("logging in...");
+  console.log("logging in...");
   const session: CookieJar = rp.jar();
 
   const homePage: string = await rp.post({
@@ -470,11 +468,10 @@ async function getFromTa(auth: IAuthMap): Promise<Course[]> {
 
   let courseIDs: RegExpMatchArray|null = idMatcher.exec(homePage);
   if (!courseIDs) {
-    output.push("No open reports found");
     throw new Error("No open reports found");
   }
 
-  output.push("logged in");
+  console.log("logged in");
   const courses: Course[] = [];
 
   let report: string;
@@ -483,7 +480,7 @@ async function getFromTa(auth: IAuthMap): Promise<Course[]> {
   let assessments: Assessment[]|null;
 
   while (courseIDs) {
-    output.push(`getting ${courseIDs[1]}...`);
+    console.log(`getting ${courseIDs[1]}...`);
     report = await rp.get({
       url: TA_COURSE_BASE_URL,
       jar: session,
@@ -491,7 +488,7 @@ async function getFromTa(auth: IAuthMap): Promise<Course[]> {
       followAllRedirects: false,
       timeout: Number(process.env.TIMEOUT)
     });
-    output.push("got report");
+    console.log("got report");
 
     report = report.replace(/\s+/g, " ");
 
@@ -512,7 +509,7 @@ async function getFromTa(auth: IAuthMap): Promise<Course[]> {
     } catch (e) {
       // even if one course fails, we want to
       // continue grabbing the other courses
-      output.push(e);
+      console.log(e);
     }
     courseIDs = idMatcher.exec(homePage);
   }
@@ -654,12 +651,8 @@ getFromTa({
   username: process.env.USER!,
   password: process.env.PASS!
 }).then((courses: Course[]) => {
-  console.log(output);
   for (const course of courses) {
     course.calculateMark();
     console.log(course.generateReport());
   }
-}).catch((err: any) => {
-  console.log(err);
-  console.log(output);
-});
+}).catch(console.log);
