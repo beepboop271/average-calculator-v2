@@ -1,8 +1,5 @@
-## Compiled JavaScript files
-**/*.js
-**/*.js.map
-
-# Typescript v1 declaration files
-typings/
-
+lib/
 node_modules/
+
+firebase-key.json
+firebase-debug.log
