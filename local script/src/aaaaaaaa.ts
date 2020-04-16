@@ -464,6 +464,10 @@ async function getFromTa(auth: IAuthMap): Promise<Course[]> {
     timeout: Number(process.env.TIMEOUT)
   });
 
+  if (/Invalid Login/.test(homePage)) {
+    throw new Error(`Invalid login: ${auth}`);
+  }
+
   const idMatcher: RegExp = new RegExp(TA_ID_REGEX, "g");
 
   let courseIDs: RegExpMatchArray|null = idMatcher.exec(homePage);
@@ -648,7 +652,7 @@ function getEndTag(
 }
 
 getFromTa({
-  username: process.env.USER!,
+  username: process.env.STUDENT_ID!,
   password: process.env.PASS!
 }).then((courses: Course[]) => {
   for (const course of courses) {
