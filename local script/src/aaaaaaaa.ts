@@ -464,9 +464,14 @@ async function getFromTa(auth: IAuthMap): Promise<Course[]> {
     timeout: Number(process.env.TIMEOUT)
   });
 
+  if (homePage.search("Invalid Login") != -1) {
+    throw new Error("Invalid login information");
+  } 
+
   const idMatcher: RegExp = new RegExp(TA_ID_REGEX, "g");
 
   let courseIDs: RegExpMatchArray|null = idMatcher.exec(homePage);
+  
   if (!courseIDs) {
     throw new Error("No open reports found");
   }
@@ -648,11 +653,11 @@ function getEndTag(
 }
 
 getFromTa({
-  username: process.env.USER!,
+  username: process.env.STUDENT_ID!,
   password: process.env.PASS!
 }).then((courses: Course[]) => {
   for (const course of courses) {
     course.calculateMark();
     console.log(course.generateReport());
   }
-}).catch(console.log);
+}).catch(e => console.log(e));

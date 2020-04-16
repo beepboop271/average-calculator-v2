@@ -16,6 +16,18 @@ interface IUser {
   courses: string[];
 }
 
+// async function promiseAllSettled(promises) {
+//   return Promise.all(promises.map(promise => {
+//     return new Promise(async (resolve, reject) => {
+//       try {
+//         resolve(await promise);
+//       } catch(e) {
+//         resolve(e);
+//       }
+//     });
+//   }));
+// }
+
 export const helloWorld = functions.https.onRequest(async (request, response) => {
   const users = await db.collection("users").get();
   if (users.empty) {
@@ -28,7 +40,6 @@ export const helloWorld = functions.https.onRequest(async (request, response) =>
     if (doc.exists) {
       console.log(`retrieving user ${doc.data().username}`)
       console.log(`retrieving from ta`);
-      // TODO: investigate marks not showing up
       taCourses = await getFromTa(<IUser>doc.data());
       console.log(JSON.stringify(taCourses, null, 2));
       console.log(`retrieving from firestore`);
@@ -41,8 +52,6 @@ export const helloWorld = functions.https.onRequest(async (request, response) =>
   response.send("Hello from Firebase!");
 });
 
-type StrandString = "k"|"t"|"c"|"a"|"f";
-
 interface IAuthMap {
   username: string;
   password: string;
@@ -54,14 +63,22 @@ interface ITagMatch {
 }
 
 interface IMark {
-  weight: number;
   numerator: number;
   denominator: number;
+  weight: number;
 }
+
+// interface IAllMarks {
+//   k: IMark|null;
+//   t: IMark|null;
+//   c: IMark|null;
+//   a: IMark|null;
+//   f: IMark|null;
+// }
 
 interface IAssessment {
   name: string;
-  marks: Map<StrandString, IMark|null>;
+  marks: {[strand: string]: IMark|null};
 }
 
 interface ICourse {
@@ -89,6 +106,12 @@ async function getFromFirestore(user: IUser): Promise<ICourse[]> {
   const date: string = getDate();
 
   let snapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
+
+  //production/testing usage
+  if (!user.courses) {
+    console.error('no courses exist here');
+    return null;
+  }
 
   const courseDocs = await Promise.all(
     user.courses.map(async (course: string) => {
@@ -188,21 +211,20 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
     console.log(`got report in ${Date.now()-startTime} ms`);
 
     report = report.replace(/\s+/g, " ");
-
     try {
       name = getName(report);
       if (name == null)
         throw new Error(`Course name not found:\n${report}`);
-
+      
       weights = getWeights(report);
       if (weights == null)
         console.warn(`Course weights not found:\n${report}`);
 
       assessments = getAssessments(report);
+
       if (assessments == null)
         console.warn(`Course assessments not found:\n${report}\n`);
-
-      courses.push(<ICourse>{ name, weights, assessments });
+      courses.push(<ICourse>{name, weights, assessments});
     } catch (e) {
       // even if one course fails, we want to
       // continue grabbing the other courses
@@ -263,7 +285,13 @@ function getAssessments(report: string): IAssessment[]|null {
     return null;
   }
 
-  report = assessmentTable.content.replace(
+  // report = assessmentTable.content.replace(
+  //   /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
+  //   ""
+  // );
+
+  //removing feedback
+  let table = assessmentTable.content.replace(
     /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
     ""
   );
@@ -271,13 +299,13 @@ function getAssessments(report: string): IAssessment[]|null {
   let row: ITagMatch|null;
   const rows: string[] = [];
   const tablePattern: RegExp = /<tr>.+<\/tr>/;
-  while (tablePattern.test(report)) {
-    row = getEndTag(report, /<tr>/, /(<tr>)|(<\/tr>)/, "<tr>");
+  while (tablePattern.test(table)) {
+    row = getEndTag(table, /<tr>/, /(<tr>)|(<\/tr>)/, "<tr>");
     if (row == null) {
-      throw new Error(`Expected to find an assessment but none was found in:\n${report}`);
+      throw new Error(`Expected to find an assessment but none was found in:\n${table}`);
     }
     rows.push(row.content);
-    report = row.next;
+    table = row.next;
   }
   rows.shift();
 
@@ -286,38 +314,40 @@ function getAssessments(report: string): IAssessment[]|null {
   const namePattern: RegExp = /<td rowspan="2">(.+?)<\/td>/;
   let name: string;
   let match: RegExpExecArray|null;
-  let marks: Map<StrandString, IMark|null>;
+  let marks: {[strand: string]: IMark|null};
 
-  const strandPatterns: Map<StrandString, RegExp> = new Map([
-    ["k", /<td bgcolor="ffffaa" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-    ["t", /<td bgcolor="c0fea4" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-    ["c", /<td bgcolor="afafff" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-    ["a", /<td bgcolor="ffd490" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-    ["f", /<td bgcolor="#?dedede" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/]
-  ]);
+  //typescript strict mode doesn't allow string indexing, have to add type that include index signature on it
+  //type Dict = {[index: string]: string}
+
+  const strandPatterns: {[strand: string]: RegExp} = {
+    k: /<td bgcolor="ffffaa" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/,
+    t: /<td bgcolor="c0fea4" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/,
+    c: /<td bgcolor="afafff" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/,
+    a: /<td bgcolor="ffd490" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/,
+    f: /<td bgcolor="#?dedede" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/
+  };
 
   for (const row of rows) {
-    marks = new Map<StrandString, IMark|null>();
+    marks = {};
 
     match = namePattern.exec(row);
-    if (match == null) {
+    if (!match) {
       throw new Error(`Could not find assessment name in row:\n${row}`);
     }
     name = match[1].trim();
 
-    for (const [strand, pattern] of strandPatterns) {
-      match = pattern.exec(row);
-      if (match == null) {
-        marks.set(strand, null);
+    for (const strand in strandPatterns) {
+      match = strandPatterns[strand].exec(row);
+      if (!match) {
+        marks[strand] = null;
       } else {
-        marks.set(strand, <IMark>{
+        marks[strand] = <IMark>{
           numerator: Number(match[1]),
           denominator: Number(match[2]),
           weight: Number(match[3])
-        });
+        };
       }
     }
-
     assessments.push(<IAssessment>{name: name, marks: marks});
   }
   return assessments;
