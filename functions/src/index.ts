@@ -16,18 +16,6 @@ interface IUser {
   courses: string[];
 }
 
-// async function promiseAllSettled(promises) {
-//   return Promise.all(promises.map(promise => {
-//     return new Promise(async (resolve, reject) => {
-//       try {
-//         resolve(await promise);
-//       } catch(e) {
-//         resolve(e);
-//       }
-//     });
-//   }));
-// }
-
 export const helloWorld = functions.https.onRequest(async (request, response) => {
   const users = await db.collection("users").get();
   if (users.empty) {
@@ -38,18 +26,23 @@ export const helloWorld = functions.https.onRequest(async (request, response) =>
   let dbCourses: ICourse[];
   users.forEach(async doc => {
     if (doc.exists) {
-      console.log(`retrieving user ${doc.data().username}`)
-      console.log(`retrieving from ta`);
-      taCourses = await getFromTa(<IUser>doc.data());
-      console.log(JSON.stringify(taCourses, null, 2));
-      console.log(`retrieving from firestore`);
-      // TODO: assessment retrieving
-      dbCourses = await getFromFirestore(<IUser>doc.data());
-      console.log(JSON.stringify(dbCourses, null, 2));
+      try {
+        console.log(`retrieving user ${doc.data().username}`)
+        console.log(`retrieving from ta`);
+        taCourses = await getFromTa(<IUser>doc.data());
+        console.log(JSON.stringify(taCourses, null, 2));
+        console.log(`retrieving from firestore`);
+        // TODO: assessment retrieving
+        dbCourses = await getFromFirestore(<IUser>doc.data());
+        console.log(JSON.stringify(dbCourses, null, 2));
+      } catch (e) {
+        console.log(e);
+      }
     }
   });
 
   response.send("Hello from Firebase!");
+  
 });
 
 interface IAuthMap {
@@ -67,14 +60,6 @@ interface IMark {
   denominator: number;
   weight: number;
 }
-
-// interface IAllMarks {
-//   k: IMark|null;
-//   t: IMark|null;
-//   c: IMark|null;
-//   a: IMark|null;
-//   f: IMark|null;
-// }
 
 interface IAssessment {
   name: string;
@@ -107,29 +92,23 @@ async function getFromFirestore(user: IUser): Promise<ICourse[]> {
 
   let snapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
 
-  //production/testing usage
-  if (!user.courses) {
-    console.error('no courses exist here');
-    return null;
-  }
-
   const courseDocs = await Promise.all(
-    user.courses.map(async (course: string) => {
+    user.courses.map(async (courseName: string) => {
       try {
         snapshot = await coursesRef
-          .where("name", "==", course)
+          .where("name", "==", courseName)
           .where("date", "==", date)
           .get();
       } catch (e) {
-        console.error(`Failed to retrieve course {name: ${course}, date: ${date}}:\n${e}`);
+        console.error(`Failed to retrieve course {name: ${courseName}, date: ${date}}:\n${e}`);
         return null;
       }
 
       if (snapshot.empty) {
-        console.error(`Found no such course {name: ${course}, date: ${date}}`);
+        console.error(`Found no such course {name: ${courseName}, date: ${date}}`);
         return null;
       } else if (snapshot.size > 1) {
-        console.error(`Found more than one course {name: ${course}, date: ${date}}`);
+        console.error(`Found more than one course {name: ${courseName}, date: ${date}}`);
         return null;
       } else {
         return snapshot.docs[0];
@@ -141,7 +120,7 @@ async function getFromFirestore(user: IUser): Promise<ICourse[]> {
   let course: ICourse;
 
   for (const courseDoc of courseDocs) {
-    if (courseDoc != null) {
+    if (courseDoc !== null) {
       course = <ICourse>courseDoc.data();
 
       if (!course.period || !course.room || !course.date || !course.name) {
@@ -171,14 +150,24 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
   const session: CookieJar = rp.jar();
 
   let startTime = Date.now();
-  const homePage: string = await rp.post({
-    url: "https://ta.yrdsb.ca/yrdsb/index.php",
-    jar: session,
-    form: auth,
-    followAllRedirects: true,
-    timeout: 500
-    // timeout: Number(process.env.TIMEOUT)
-  });
+  let homePage: string;
+  try {
+    homePage = await rp.post({
+      url: "https://ta.yrdsb.ca/yrdsb/index.php",
+      jar: session,
+      form: auth,
+      followAllRedirects: true
+      // timeout: 500
+      // timeout: Number(process.env.TIMEOUT)
+    });
+  } catch (e) {
+    throw e;
+  }
+
+  if (/Invalid Login/.test(homePage)) {
+    throw new Error(`Invalid login: ${auth}`);
+  }
+
   console.log(`homepage retrieved in ${Date.now()-startTime} ms`);
 
   const idMatcher: RegExp = /<a href="viewReport.php\?subject_id=([0-9]+)&student_id=([0-9]+)">/g;
@@ -200,29 +189,33 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
     console.log(`getting ${courseIDs[1]}...`);
 
     startTime = Date.now();
-    report = await rp.get({
-      url: "https://ta.yrdsb.ca/live/students/viewReport.php",
-      jar: session,
-      qs: { subject_id: courseIDs[1], student_id: courseIDs[2] },
-      followAllRedirects: false,
-      timeout: 500
-      // timeout: Number(process.env.TIMEOUT)
-    });
+    try {
+      report = await rp.get({
+        url: "https://ta.yrdsb.ca/live/students/viewReport.php",
+        jar: session,
+        qs: { subject_id: courseIDs[1], student_id: courseIDs[2] },
+        followAllRedirects: false
+        // timeout: 500
+        // timeout: Number(process.env.TIMEOUT)
+      });
+    } catch (e) {
+      throw e;
+    }
+
     console.log(`got report in ${Date.now()-startTime} ms`);
 
     report = report.replace(/\s+/g, " ");
     try {
       name = getName(report);
-      if (name == null)
+      if (name === null)
         throw new Error(`Course name not found:\n${report}`);
       
       weights = getWeights(report);
-      if (weights == null)
+      if (weights === null)
         console.warn(`Course weights not found:\n${report}`);
 
       assessments = getAssessments(report);
-
-      if (assessments == null)
+      if (assessments === null)
         console.warn(`Course assessments not found:\n${report}\n`);
       courses.push(<ICourse>{name, weights, assessments});
     } catch (e) {
@@ -246,12 +239,11 @@ function getName(report: string): string|null {
 
 function getWeights(report: string): number[]|null {
   const idx: number = report.indexOf("#ffffaa");
-  if (idx == -1) {
+  if (idx === -1) {
     return null;
   }
-  report = report.slice(idx, idx+800);
 
-  const weightTable: string[] = report.split("#");
+  const weightTable: string[] = report.slice(idx, idx+800).split("#");
   weightTable.shift();
 
   const weights: number[] = [];
@@ -259,14 +251,14 @@ function getWeights(report: string): number[]|null {
 
   for (let i: number = 0; i < 4; ++i) {
     match = weightTable[i].substring(weightTable[i].indexOf("%")).match(/([0-9\.]+)%/);
-    if (match == null) {
+    if (match === null) {
       throw new Error(`Found weight table but couldn't find weight percentages in:\n${weightTable[i]}`);
     }
     weights.push(Number(match[1]));
   }
 
   match = weightTable[5]?.match(/([0-9\.]+)%/);
-  if (match == null) {
+  if (match === null) {
     throw new Error(`Could not find final weight in:\n${weightTable}`);
   }
   weights.push(Number(match[1]));
@@ -281,31 +273,31 @@ function getAssessments(report: string): IAssessment[]|null {
     /(<table)|(<\/table>)/,
     "<table"
   );
-  if (assessmentTable == null) {
+  if (assessmentTable === null) {
     return null;
   }
 
-  // report = assessmentTable.content.replace(
-  //   /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
-  //   ""
-  // );
-
-  //removing feedback
-  let table = assessmentTable.content.replace(
+  report = assessmentTable.content.replace(
     /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
     ""
   );
 
-  let row: ITagMatch|null;
+  //removing feedback
+  // let table = assessmentTable.content.replace(
+  //   /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
+  //   ""
+  // );
+
+  let tableRow: ITagMatch|null;
   const rows: string[] = [];
   const tablePattern: RegExp = /<tr>.+<\/tr>/;
-  while (tablePattern.test(table)) {
-    row = getEndTag(table, /<tr>/, /(<tr>)|(<\/tr>)/, "<tr>");
-    if (row == null) {
-      throw new Error(`Expected to find an assessment but none was found in:\n${table}`);
+  while (tablePattern.test(report)) {
+    tableRow = getEndTag(report, /<tr>/, /(<tr>)|(<\/tr>)/, "<tr>");
+    if (tableRow === null) {
+      throw new Error(`Expected to find an assessment but none was found in:\n${report}`);
     }
-    rows.push(row.content);
-    table = row.next;
+    rows.push(tableRow.content);
+    report = tableRow.next;
   }
   rows.shift();
 
@@ -331,14 +323,14 @@ function getAssessments(report: string): IAssessment[]|null {
     marks = {};
 
     match = namePattern.exec(row);
-    if (!match) {
+    if (match === null) {
       throw new Error(`Could not find assessment name in row:\n${row}`);
     }
     name = match[1].trim();
 
     for (const strand in strandPatterns) {
       match = strandPatterns[strand].exec(row);
-      if (!match) {
+      if (match === null) {
         marks[strand] = null;
       } else {
         marks[strand] = <IMark>{
@@ -360,7 +352,7 @@ function getEndTag(
   startTag: string
 ): ITagMatch|null {
   let match: RegExpMatchArray|null = report.match(beginningPattern);
-  if (match == null) {
+  if (match === null) {
     return null;
   }
   const idx: number = match.index!;
@@ -370,10 +362,10 @@ function getEndTag(
 
   while (tagsToClose > 0) {
     match = searcher.exec(report.substring(idx+1));
-    if (match == null) {
+    if (match === null) {
       return null;
     }
-    if (match[0] == startTag) {
+    if (match[0] === startTag) {
       ++tagsToClose;
     } else {
       --tagsToClose;

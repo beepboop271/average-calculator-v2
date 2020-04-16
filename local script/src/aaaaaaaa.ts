@@ -464,9 +464,9 @@ async function getFromTa(auth: IAuthMap): Promise<Course[]> {
     timeout: Number(process.env.TIMEOUT)
   });
 
-  if (homePage.search("Invalid Login") != -1) {
-    throw new Error("Invalid login information");
-  } 
+  if (/Invalid Login/.test(homePage)) {
+    throw new Error(`Invalid login: ${auth}`);
+  }
 
   const idMatcher: RegExp = new RegExp(TA_ID_REGEX, "g");
 
