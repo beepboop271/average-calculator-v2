@@ -16,34 +16,60 @@ interface IUser {
   courses: string[];
 }
 
-export const helloWorld = functions.https.onRequest(async (request, response) => {
+export const run = functions.https.onRequest(async (request, response) => {
   const users = await db.collection("users").get();
   if (users.empty) {
     response.send("kms");
     return;
   }
   let taCourses: ICourse[];
-  let dbCourses: ICourse[];
-  users.forEach(async doc => {
-    if (doc.exists) {
+  
+  users.forEach(async userDoc => {
+    if (userDoc.exists) {
       try {
-        console.log(`retrieving user ${doc.data().username}`)
+        console.log(`retrieving user ${userDoc.data().username}`)
         console.log(`retrieving from ta`);
-        taCourses = await getFromTa(<IUser>doc.data());
-        console.log(JSON.stringify(taCourses, null, 2));
-        console.log(`retrieving from firestore`);
-        // TODO: assessment retrieving
-        dbCourses = await getFromFirestore(<IUser>doc.data());
-        console.log(JSON.stringify(dbCourses, null, 2));
+        taCourses = await getFromTa(<IUser>userDoc.data());
+
+        await updateFirestoreData(taCourses, userDoc.id);
+        // console.log(JSON.stringify(taCourses, null, 2));
+        
       } catch (e) {
         console.log(e);
       }
     }
   });
-
   response.send("Hello from Firebase!");
-  
 });
+
+
+export const onMarkUpdate = functions.firestore
+      .document('courses/{course}/assessments/{assessment}')
+      .onWrite((change, context) => {
+  const oldAssessment: FirebaseFirestore.DocumentData = change.before.data();
+  const assessment: FirebaseFirestore.DocumentData = change.after.data();
+
+  if (!change.before.exists) {
+    console.log(`new mark: ${assessment.courseName}`);
+    console.log(`assessment: ${assessment.name}`);
+    console.log(`user: ${assessment.userId}`);
+    console.log(assessment);
+  } else if (!change.after.exists) {
+    console.log(`assessment deleted: ${oldAssessment.name}`);
+    console.log(`user: ${oldAssessment.userId}`);
+    console.log(oldAssessment);
+  } else if (oldAssessment !== assessment) {
+    console.log(`updated mark: ${assessment.courseName}`);
+    console.log(`assessment: ${assessment.name}`);
+    console.log(`user: ${assessment.userId}`);
+    console.log(oldAssessment);
+    console.log(assessment);
+  } else {
+    console.log('no change');
+  }
+  return Promise.resolve();
+});
+
 
 interface IAuthMap {
   username: string;
@@ -72,7 +98,7 @@ interface ICourse {
   room: string;
   date: string;
 
-  weights: number[]|null;
+  weights: {[strand: string]: number}|null;
   assessments: IAssessment[]|null;
 }
 
@@ -86,64 +112,184 @@ function getDate(): string {
   }
 }
 
-async function getFromFirestore(user: IUser): Promise<ICourse[]> {
-  const coursesRef = db.collection("courses");
-  const date: string = getDate();
-
-  let snapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
-
-  const courseDocs = await Promise.all(
-    user.courses.map(async (courseName: string) => {
-      try {
-        snapshot = await coursesRef
-          .where("name", "==", courseName)
-          .where("date", "==", date)
-          .get();
-      } catch (e) {
-        console.error(`Failed to retrieve course {name: ${courseName}, date: ${date}}:\n${e}`);
-        return null;
-      }
-
-      if (snapshot.empty) {
-        console.error(`Found no such course {name: ${courseName}, date: ${date}}`);
-        return null;
-      } else if (snapshot.size > 1) {
-        console.error(`Found more than one course {name: ${courseName}, date: ${date}}`);
-        return null;
+async function updateFirestoreData(taCourses: ICourse[], userId: string) {
+  return Promise.all(taCourses.map(async (course: ICourse) => {
+    const coursesRef = db.collection('courses');
+    const date = getDate();
+    
+    try {
+      let docId: string;
+      const courseSnapshot = await coursesRef
+            .where('name', '==', course.name)
+            .where('date', '==', date)
+            .get();
+      //if this course does not exist, first time set up add weightings
+      if (courseSnapshot.empty) {
+        docId = (await coursesRef.add({
+          name: course.name,
+          date: date,
+          students: [],
+          assessmentNames: [],
+          weights: course.weights
+        })).id;
       } else {
-        return snapshot.docs[0];
+        docId = courseSnapshot.docs[0].id;
       }
-    })
-  );
+      const courseRef = coursesRef.doc(docId);
 
-  const courses: ICourse[] = [];
-  let course: ICourse;
-
-  for (const courseDoc of courseDocs) {
-    if (courseDoc !== null) {
-      course = <ICourse>courseDoc.data();
-
-      if (!course.period || !course.room || !course.date || !course.name) {
-        // shouldn't even be possible to miss date or name but whatever
-        console.warn(`Course missing info fields (expected name, period, room, date):\n${JSON.stringify(course)}`);
-      }
-
-      if (!course.weights) {
-        console.error(`Course missing weights:\n${JSON.stringify(course)}`);
+      //who knows when this may be useful
+      const students: string[] = (await courseRef.get())
+                                .data().students;
+      
+      //add the student to the course
+      if (!students.includes(userId)) {
+        students.push(userId);
+        courseRef.update({
+          students: students
+        }).catch(err => {
+          console.log('Unable to update course with student');
+          throw err;
+        });
       }
 
-      snapshot = await courseDoc.ref.collection("assessments").get();
-      if (snapshot.empty) {
-        console.log(`No assessments found:\n${JSON.stringify(course)}`);
-        course.assessments = [];
-      } else {
-        console.log("not implemented lmao");
-        course.assessments = [];
-      }
+      return Promise.all([
+        deleteRemovedAssessments(course, courseRef),
+        updateAssessments(course, courseRef, userId)
+      ]);
+    } catch (e) {
+      //I'll do something about this later
+      throw e;
     }
-  }
-  return courses;
+    
+  }));
 }
+
+//in case a teacher deletes an assessment from ta
+async function deleteRemovedAssessments(
+  course: ICourse, 
+  courseRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>, 
+) {
+  const firestoreAssessmentNames: string[] = (await courseRef.get())
+                                              .data().assessmentNames;
+  const assessmentNames: string[] = [];
+  course.assessments.forEach(assessment => {
+    assessmentNames.push(assessment.name);
+  });
+  const removedAssessments = firestoreAssessmentNames.filter((name: string) => {
+    return !assessmentNames.includes(name);
+  })
+
+  //if there aren't any removed assessments
+  if (removedAssessments.length == 0) {
+    return courseRef.update({assessmentNames: assessmentNames});
+  }
+
+  const assessmentsRef = courseRef.collection('assessments');
+  const removedAssessmentsSnapshot = await assessmentsRef
+                                      .where('name', 'in', removedAssessments)
+                                      .get();
+
+  //this shouldn't happen unless something really wrong happens
+  let deletePromise: Promise<FirebaseFirestore.WriteResult[]>;
+  if (removedAssessmentsSnapshot.empty) {
+    console.warn('Unable to find removed assessments');
+  } else {
+    deletePromise = Promise.all(removedAssessmentsSnapshot.docs.map(snap => {
+      return assessmentsRef.doc(snap.id).delete();
+    }));
+  }
+  const updatePromise: Promise<FirebaseFirestore.WriteResult>
+        = courseRef.update({assessmentNames: assessmentNames});
+  return Promise.all([deletePromise, updatePromise]);
+}
+
+
+//update/create the assessment to the database
+async function updateAssessments(
+  course: ICourse, 
+  courseRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>, 
+  userId: string
+) {
+  const assessmentsRef = courseRef.collection('assessments');
+  return Promise.all(course.assessments.map(async (assessment: IAssessment) => {
+    const assessmentSnapshot = await assessmentsRef
+          .where('userId', '==', userId)
+          .where('name', '==', assessment.name)
+          .get();
+    //add doc if its a new doc
+    if (assessmentSnapshot.empty) {
+      return assessmentsRef.add({
+        name: assessment.name,
+        userId: userId,
+        courseRef: courseRef,
+        courseName: course.name,
+        ...assessment.marks
+      });
+    }
+    //update marks if doc exists
+    return assessmentsRef.doc(assessmentSnapshot.docs[0].id).update(assessment.marks);
+  }));
+}
+
+
+// async function getFromFirestore(user: IUser): Promise<ICourse[]> {
+//   const coursesRef = db.collection("courses");
+//   const date: string = getDate();
+
+//   let snapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
+
+//   const courseDocs = await Promise.all(
+//     user.courses.map(async (courseName: string) => {
+//       try {
+//         snapshot = await coursesRef
+//           .where("name", "==", courseName)
+//           .where("date", "==", date)
+//           .get();
+//       } catch (e) {
+//         console.error(`Failed to retrieve course {name: ${courseName}, date: ${date}}:\n${e}`);
+//         return null;
+//       }
+
+//       if (snapshot.empty) {
+//         console.error(`Found no such course {name: ${courseName}, date: ${date}}`);
+//         return null;
+//       } else if (snapshot.size > 1) {
+//         console.error(`Found more than one course {name: ${courseName}, date: ${date}}`);
+//         return null;
+//       } else {
+//         return snapshot.docs[0];
+//       }
+//     })
+//   );
+
+//   const courses: ICourse[] = [];
+//   let course: ICourse;
+
+//   for (const courseDoc of courseDocs) {
+//     if (courseDoc !== null) {
+//       course = <ICourse>courseDoc.data();
+
+//       if (!course.period || !course.room || !course.date || !course.name) {
+//         // shouldn't even be possible to miss date or name but whatever
+//         console.warn(`Course missing info fields (expected name, period, room, date):\n${JSON.stringify(course)}`);
+//       }
+
+//       if (!course.weights) {
+//         console.error(`Course missing weights:\n${JSON.stringify(course)}`);
+//       }
+
+//       snapshot = await courseDoc.ref.collection("assessments").get();
+//       if (snapshot.empty) {
+//         console.log(`No assessments found:\n${JSON.stringify(course)}`);
+//         course.assessments = [];
+//       } else {
+//         console.log("not implemented lmao");
+//         course.assessments = [];
+//       }
+//     }
+//   }
+//   return courses;
+// }
 
 async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
   console.log(`logging in as ${auth.username}...`);
@@ -182,7 +328,7 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
 
   let report: string;
   let name: string|null;
-  let weights: number[]|null;
+  let weights: {[strand: string]: number}|null;
   let assessments: IAssessment[]|null;
 
   while (courseIDs) {
@@ -237,7 +383,7 @@ function getName(report: string): string|null {
   }
 }
 
-function getWeights(report: string): number[]|null {
+function getWeights(report: string): {[strand: string]: number}|null {
   const idx: number = report.indexOf("#ffffaa");
   if (idx === -1) {
     return null;
@@ -263,7 +409,14 @@ function getWeights(report: string): number[]|null {
   }
   weights.push(Number(match[1]));
 
-  return weights;
+  const weightObj: {[strand: string]: number} = {
+    k: weights[0],
+    t: weights[1],
+    c: weights[2],
+    a: weights[3],
+    f: weights[4]
+  };
+  return weightObj;
 }
 
 function getAssessments(report: string): IAssessment[]|null {
