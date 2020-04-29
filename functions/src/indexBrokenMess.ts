@@ -31,7 +31,7 @@ export const run = functions.https.onRequest(async (request, response) => {
         console.log(`retrieving from ta`);
         taCourses = await getFromTa(<IUser>userDoc.data());
 
-        await updateFirestoreData(taCourses, userDoc.data().uid);
+        await updateFirestoreData(taCourses, userDoc.id);
         // console.log(JSON.stringify(taCourses, null, 2));
         
       } catch (e) {
@@ -68,37 +68,6 @@ export const onMarkUpdate = functions.firestore
     console.log('no change');
   }
   return Promise.resolve();
-});
-
-export const updateTaCredentials = functions.https.onRequest(async (req, res) => {
-  try {
-    //I probably need to parse this but that's after I finish front end
-    console.log(req.body);
-    //search the user by its uid
-    const user =  req.body;
-    const userSnapshot = await db.collection('users')
-          .where('uid', '==', user.uid)
-          .get();
-    if (userSnapshot.empty) {
-      await db.collection('users').add({
-        username: user.username,
-        password: user.password,
-        uid: user.uid
-      });
-      res.send('new user document added');
-    }
-    
-    if (userSnapshot.size > 1) {
-      console.warn('multiple instances of the same user has been found');
-    }
-    await db.collection('users').doc(userSnapshot.docs[0].id).update({
-      username: user.username,
-      password: user.password
-    });
-    res.send('successfully updated');
-  } catch (e) {
-    throw e;
-  }
 });
 
 
@@ -242,7 +211,6 @@ async function updateAssessments(
   userId: string
 ) {
   const assessmentsRef = courseRef.collection('assessments');
-
   return Promise.all(course.assessments.map(async (assessment: IAssessment) => {
     const assessmentSnapshot = await assessmentsRef
           .where('userId', '==', userId)
@@ -323,7 +291,6 @@ async function updateAssessments(
 //   }
 //   return courses;
 // }
-
 
 async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
   console.log(`logging in as ${auth.username}...`);
