@@ -3,33 +3,8 @@ import {Container, Header, Content, Form, Item, Input, Button, Text} from 'nativ
 import {StyleSheet, View} from 'react-native';
 import {FirebaseAuthTypes, firebase} from '@react-native-firebase/auth';
 import {GoogleSignin, User, statusCodes, GoogleSigninButton} from '@react-native-community/google-signin';
-import {WEB_CLIENT_ID} from './utils/keys.js';
+import InputBox from '../components/InputBox';
 
-
-
-const InputBox = (props: {
-  placeholder: string,
-  value: string,
-  autoFocus?: boolean,
-  secureTextEntry?: boolean,
-  autoCompleteType: "username" | "password" | "name" | "cc-csc" | "cc-exp" | "cc-exp-month" | "cc-exp-year" | "cc-number" | "email" | "postal-code" | "street-address" | "tel" | "off" | undefined,
-  setValue: React.Dispatch<React.SetStateAction<string>>
-}): JSX.Element => {
-  return (
-    <Item rounded style={styles.item}>
-      <Input 
-        placeholder={props.placeholder}
-        autoCompleteType={props.autoCompleteType}
-        value={props.value}
-        autoFocus={props.autoFocus}
-        onChangeText={(text) => props.setValue(text)}
-        onSubmitEditing={() => props.setValue('')}
-        placeholderTextColor='#a9a9a9'
-        secureTextEntry={props.secureTextEntry}
-      />
-    </Item>
-  );
-};
 
 const Line = (): JSX.Element => {
   return (
@@ -42,26 +17,14 @@ const Line = (): JSX.Element => {
 };
 
 
-const Login = (props: {
+const LoginPage = (props: {
   setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>,
-  setUserInfo: React.Dispatch<React.SetStateAction<FirebaseAuthTypes.User|null>>
 }): JSX.Element => {
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
 
   const [userInfo, setUserInfo] = useState<User | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseAuthTypes.User|null>(null);
 
-  useEffect(() => {
-    GoogleSignin.configure({
-      scopes: [
-        'https://www.googleapis.com/auth/cloud-platform'
-      ],
-      webClientId: WEB_CLIENT_ID,
-      offlineAccess: true,
-      forceCodeForRefreshToken: true
-    });
-  }, []);
 
   const signIn = async () => {
     try {
@@ -71,14 +34,12 @@ const Login = (props: {
 
       const tokens = await GoogleSignin.getTokens();
       const credential = firebase.auth.GoogleAuthProvider
-          .credential(tokens.idToken, tokens.accessToken);
+                          .credential(tokens.idToken, tokens.accessToken);
       const firebaseUserCredential = await firebase.auth()
-          .signInWithCredential(credential);
-      setFirebaseUser(firebaseUserCredential.user);
-      console.log(firebaseUserCredential);
-
+                                    .signInWithCredential(credential);
+      // setFirebaseUser(firebaseUserCredential.user);
+      // console.log(firebaseUserCredential);
       props.setLoggedIn(true);
-      props.setUserInfo(firebaseUser);
 
     } catch (err) {
       if (err.code === statusCodes.SIGN_IN_CANCELLED) {
@@ -135,9 +96,6 @@ const styles = StyleSheet.create({
     padding: '10%',
     paddingTop: '40%'
   },
-  item: {
-    margin: '3%',
-  },
   button: {
     width: '50%',
     marginLeft: 'auto',
@@ -167,4 +125,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default Login;
+export default LoginPage;

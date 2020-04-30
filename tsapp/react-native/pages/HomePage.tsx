@@ -1,46 +1,42 @@
 import React, {useState, useEffect} from 'react';
-import {Container, Content, Button, Text} from 'native-base';
+import {Container, Content, Button, Text, Spinner} from 'native-base';
 import {GoogleSignin} from '@react-native-community/google-signin';
 import {firebase, FirebaseAuthTypes} from '@react-native-firebase/auth';
 
-
 const HomePage = (props: {
   setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>,
-  setUserInfo: React.Dispatch<React.SetStateAction<FirebaseAuthTypes.User|null>>
+  firebaseUserInfo: FirebaseAuthTypes.User|null
 }) => {
-  const [userInfo, setUserInfo] = useState<FirebaseAuthTypes.User|null>(null);
+  const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
 
   const signOut = async () => {
     try {
+      setIsSigningOut(true);
       await GoogleSignin.revokeAccess();
       await GoogleSignin.signOut();
-      setUserInfo(null);
-      props.setUserInfo(userInfo);
+      await firebase.auth().signOut();
+      // setFirebaseUserInfo(null);
+      setIsSigningOut(false);
       props.setLoggedIn(false);
     } catch (err) {
       console.log(err);
     }
   };
 
-  useEffect(() => {
-    const user: FirebaseAuthTypes.User|null = firebase.auth().currentUser;
-    setUserInfo(user);
-  }, []);
-
   return (
     <Container>
       <Content>
-        {
-          userInfo
-          ? <Text>welcome {userInfo.displayName}</Text>
-          : <Text>Signing out...</Text>
-        }
         <Button onPress={signOut}>
           <Text>Sign out</Text>
         </Button>
-        <Button onPress={() => console.log(userInfo?.uid)}>
-          <Text>Test</Text>
+        <Button onPress={() => console.log(props.firebaseUserInfo?.uid)}>
+          <Text>Uid</Text>
         </Button>
+        {
+          isSigningOut
+          ? <Spinner/>
+          : null
+        }
       </Content>
     </Container>
   );
