@@ -1,4 +1,4 @@
-import firebase from 'react-native-firebase';
+import firestore from '@react-native-firebase/firestore';
 import axios from 'axios';
 
 export const errorCodes = {
@@ -49,17 +49,17 @@ export const updateFcmToken = (fcmToken: FcmToken) => {
 const updateCredentials = (credentials: TaCredentials|FcmToken) => {
   return new Promise(async (resolve, reject) => {
     try {
-      const userSnapshot = await firebase.firestore().collection('users')
+      const userSnapshot = await firestore().collection('users')
             .where('uid', '==', credentials.uid)
             .get();
 
       if (userSnapshot.size > 1) reject('Multiple user entries found');
       if (userSnapshot.empty) {
-        await firebase.firestore().collection('users').add(credentials);
+        await firestore().collection('users').add(credentials);
         resolve('New user added');
       }
 
-      await firebase.firestore()
+      await firestore()
           .collection('users').doc(userSnapshot.docs[0].id)
           .update(credentials);
       resolve('User credentials updated');

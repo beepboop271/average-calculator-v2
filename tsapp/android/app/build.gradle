@@ -227,19 +227,19 @@ dependencies {
     implementation(project(":@react-native-community_google-signin"))
     
     //firebase
-    // implementation project(':@react-native-firebase_auth')
-    // implementation project(':@react-native-firebase_messaging')
+    //v5
+    // implementation project(':react-native-firebase')
 
-    implementation project(':react-native-firebase')
+    
     implementation "com.google.firebase:firebase-auth:19.3.1"
     implementation "com.google.android.gms:play-services-base:16.1.0"
-    implementation "com.google.firebase:firebase-core:16.0.9"
+    // implementation "com.google.firebase:firebase-core:16.0.9"
     implementation "com.google.firebase:firebase-firestore:21.4.3"
 
-    //fcm
+    implementation 'com.google.firebase:firebase-analytics:17.3.0'
     implementation 'com.google.firebase:firebase-messaging:20.1.6'
-    implementation 'com.google.firebase:firebase-inappmessaging:19.0.6'
-    implementation 'com.google.firebase:firebase-inappmessaging-display:19.0.6'
+    // implementation 'com.google.firebase:firebase-inappmessaging:19.0.6'
+    // implementation 'com.google.firebase:firebase-inappmessaging-display:19.0.6'
     
     //noinspection GradleDynamicVersion
     implementation "com.facebook.react:react-native:+"  // From node_modules

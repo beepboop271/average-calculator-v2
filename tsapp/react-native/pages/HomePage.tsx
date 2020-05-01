@@ -1,13 +1,13 @@
 import React, {useState, useEffect} from 'react';
 import {Container, Content, Button, Text, Spinner} from 'native-base';
 import {GoogleSignin} from '@react-native-community/google-signin';
-// import {firebase, FirebaseAuthTypes} from '@react-native-firebase/auth';
-import firebase, {RNFirebase} from 'react-native-firebase';
+import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
+// import firebase, {RNFirebase} from 'react-native-firebase';
 
 
 interface Props {
   setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
-  firebaseUserInfo: RNFirebase.auth.OrNull<RNFirebase.User>;
+  firebaseUserInfo: FirebaseAuthTypes.User|null;
 };
 
 const HomePage: React.FC<Props> = ({setLoggedIn, firebaseUserInfo}) => {
@@ -18,7 +18,7 @@ const HomePage: React.FC<Props> = ({setLoggedIn, firebaseUserInfo}) => {
       setIsSigningOut(true);
       await GoogleSignin.revokeAccess();
       await GoogleSignin.signOut();
-      await firebase.auth().signOut();
+      await auth().signOut();
       // setFirebaseUserInfo(null);
       setIsSigningOut(false);
       setLoggedIn(false);

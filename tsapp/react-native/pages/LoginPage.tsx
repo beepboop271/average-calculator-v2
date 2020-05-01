@@ -2,7 +2,8 @@ import React, {useState, useEffect} from 'react';
 import {Container, Header, Content, Form, Item, Input, Button, Text} from 'native-base';
 import {StyleSheet, View} from 'react-native';
 // import {FirebaseAuthTypes, firebase} from '@react-native-firebase/auth';
-import firebase, {RNFirebase} from 'react-native-firebase';
+// import firebase, {RNFirebase} from 'react-native-firebase';
+import auth from '@react-native-firebase/auth';
 import {GoogleSignin, User, statusCodes, GoogleSigninButton} from '@react-native-community/google-signin';
 import InputBox from '../components/InputBox';
 
@@ -36,9 +37,9 @@ const LoginPage: React.FC<Props> = ({setLoggedIn}) => {
       setUserInfo(userInfo);
 
       const tokens = await GoogleSignin.getTokens();
-      const credential = firebase.auth.GoogleAuthProvider
+      const credential = auth.GoogleAuthProvider
                           .credential(tokens.idToken, tokens.accessToken);
-      const firebaseUserCredential = await firebase.auth()
+      const firebaseUserCredential = await auth()
                                     .signInWithCredential(credential);
       // setFirebaseUser(firebaseUserCredential.user);
       // console.log(firebaseUserCredential);

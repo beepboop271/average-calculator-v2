@@ -3,7 +3,12 @@ import {StyleSheet, View, Text} from 'react-native';
 import {Container, Content, Spinner} from 'native-base';
 import {GoogleSignin, User, statusCodes} from '@react-native-community/google-signin';
 import AsyncStorage from '@react-native-community/async-storage';
-import firebase, {RNFirebase} from 'react-native-firebase';
+//index.d.ts so sketched, two interface with the same name
+import PushNotification, {PushNotification as IPushNotification} from 'react-native-push-notification';
+import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
+import messaging, {FirebaseMessagingTypes} from '@react-native-firebase/messaging';
+import * as Notifications from 'expo-notifications';
+
 
 import LoginPage from './react-native/pages/LoginPage';
 import HomePage from './react-native/pages/HomePage';
@@ -12,15 +17,18 @@ import TaCredentialsPage from './react-native/pages/TaCredentialsPage';
 import {updateFcmToken, FcmToken} from './react-native/functions/functions';
 import {WEB_CLIENT_ID} from './utils/keys.js';
 
-const LoggedInPage = () => {
 
+interface Token {
+  os: string;
+  token: string;
 };
 
 const App = () => {
-  const [firebaseUserInfo, setFirebaseUserInfo] = useState<RNFirebase.auth.OrNull<RNFirebase.User>>(null);
+  const [firebaseUserInfo, setFirebaseUserInfo] = useState<FirebaseAuthTypes.User|null>(null);
   const [userInfo, setUserInfo] = useState<User|null>(null);
   const [loggedIn, setLoggedIn] = useState<boolean>(false);
   const [initializing, setInitializing] = useState<boolean>(true);
+  const [token, setToken] = useState<Token|null>(null);
 
   const updateToken = async () => {
     try {
@@ -38,13 +46,13 @@ const App = () => {
 
 
   const getToken = async () => {
-    const hasPerm: boolean = await firebase.messaging().hasPermission();
+    const hasPerm: FirebaseMessagingTypes.AuthorizationStatus = await messaging().hasPermission();
     if (hasPerm) {
       console.log('get token');
       let fcmToken: string|null = await AsyncStorage.getItem('fcmToken');
       if (!fcmToken) {
         console.log('got new token');
-        fcmToken = await firebase.messaging().getToken();
+        fcmToken = await messaging().getToken();
         await AsyncStorage.setItem('fcmToken', fcmToken);
         await updateToken();
       }
@@ -62,34 +70,30 @@ const App = () => {
     });
   }, []);
 
+  // const handleNotification = (notification: IPushNotification) => {
+  //   console.log(notification);
+  // };
 
-  useEffect(() => {
-    // Build a channel
-    const channel = new firebase.notifications.Android.Channel('kms', 'ahh', firebase.notifications.Android.Importance.Max)
-    .setDescription('My apps test channel');
-
-    // Create the channel
-    firebase.notifications().android.createChannel(channel);
-    (async() => {
-      const notifOpen = await firebase.notifications().getInitialNotification();
-      if (notifOpen) {
-        const action = notifOpen.action;
-        const notification = notifOpen.notification;
-      }
-    })();
-    firebase.notifications().onNotificationDisplayed((notification => {
-      console.log(notification);
-    }))
-    firebase.notifications().onNotification((notification => {
-      notification.android.setChannelId('kms');
-      firebase.notifications().displayNotification(notification);
-    }))
-    
-  }, []);
+  
+  // useEffect(() => {
+  //   (async() => {
+  //     try {
+  //       console.log(await Notifications.getNotificationChannelsAsync());
+  //     } catch (err) {
+  //       console.log(err);
+  //     }
+      
+  //   })();
+  //   // PushNotification.configure({
+  //   //   onNotification: handleNotification,
+  //   //   popInitialNotification: true,
+  //   //   onRegister: setToken
+  //   // });
+  // }, []);
 
   //checks if the user is signed in
   useEffect(() => {
-    const unsubscribe = firebase.auth().onAuthStateChanged((user: RNFirebase.auth.OrNull<RNFirebase.User>) => {
+    const unsubscribe = auth().onAuthStateChanged((user: FirebaseAuthTypes.User|null) => {
       setFirebaseUserInfo(user);
 
       //get google sign in not firebase sign in
@@ -122,16 +126,16 @@ const App = () => {
     //get tokens if logged in
     if (loggedIn) {
       getToken();
-      firebase.messaging().onTokenRefresh(async (fcmToken: string) => {
+      messaging().onTokenRefresh(async (fcmToken: string) => {
         console.log('got refreshed token');
         await AsyncStorage.setItem('fcmToken', fcmToken);
         updateToken();
       });
-      // firebase.messaging().(async (remoteMessages) => {
-      //   console.log('background message: ');
-      //   console.log(remoteMessages);
-      // });
-      firebase.messaging().onMessage(async remoteMessage => {
+      messaging().setBackgroundMessageHandler(async (remoteMessages) => {
+        console.log('background message: ');
+        console.log(remoteMessages);
+      });
+      messaging().onMessage(async remoteMessage => {
         console.log('foreground message: ');
         console.log(remoteMessage);
       });
