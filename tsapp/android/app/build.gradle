@@ -3,6 +3,36 @@ apply plugin: "com.android.application"
 
 import com.android.build.OutputFile
 
+//fcm
+project.ext {
+  set('react-native', [
+    versions: [
+      // Overriding Build/Android SDK Versions
+      android : [
+        minSdk    : 16,
+        targetSdk : 28,
+        compileSdk: 28,
+        buildTools: "28.0.3"
+      ],
+
+      // Overriding Library SDK Versions
+      firebase: [
+        // Override Firebase SDK Version
+        bom           : "21.1.0",
+
+        // Override Crashlytics SDK Version
+        crashlytics   : "2.10.0",
+
+        // Override Crashlytics SDK Version
+        crashlyticsNdk: "2.1.0"
+      ],
+    ],
+  ])
+}
+
+
+
+
 /**
  * The react.gradle file registers a task for each build variant (e.g. bundleDebugJsAndAssets
  * and bundleReleaseJsAndAssets).
@@ -197,10 +227,18 @@ dependencies {
     implementation(project(":@react-native-community_google-signin"))
     
     //firebase
+    // implementation project(':@react-native-firebase_auth')
+    // implementation project(':@react-native-firebase_messaging')
+
     // implementation project(':react-native-firebase')
     implementation "com.google.firebase:firebase-auth:17.0.0"
     implementation "com.google.android.gms:play-services-base:16.1.0"
     implementation "com.google.firebase:firebase-core:16.0.9"
+
+    //fcm
+    implementation 'com.google.firebase:firebase-messaging:20.1.6'
+    implementation 'com.google.firebase:firebase-inappmessaging:19.0.6'
+    implementation 'com.google.firebase:firebase-inappmessaging-display:19.0.6'
     
     //noinspection GradleDynamicVersion
     implementation "com.facebook.react:react-native:+"  // From node_modules

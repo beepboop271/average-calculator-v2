@@ -1,27 +1,42 @@
 import React, {useState, useEffect} from 'react';
-import {Container, Header, Content, Form, Item, Button, Text, Spinner} from 'native-base';
+import {Container, Header, Content, Form, Button, Text, Spinner} from 'native-base';
 import {StyleSheet, View} from 'react-native';
-import InputBox from '../components/InputBox';
 import axios from 'axios';
 
-const TaCredentialsPage = (props: {
-  uid: string|undefined
-}) => {
+
+import InputBox from '../components/InputBox';
+import {updateTaCredentials as updateTa, TaCredentials, errorCodes} from '../functions/functions';
+
+interface Props {
+  uid: string|undefined;
+};
+
+const TaCredentialsPage: React.FC<Props> = ({uid})  => {
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [isInvalid, setIsInvalid] = useState<boolean>(false);
 
   const updateTaCredentials = async () => {
     try {
       setIsUpdating(true);
-      const res = await axios.post('https://us-central1-avg-calc.cloudfunctions.net/updateTaCredentials', {
+      setIsInvalid(false);
+      const res = await updateTa({
+        uid: uid,
         username: username,
-        password: password,
-        uid: props.uid,
-      });
-      console.log(res.data);
+        password: password
+      } as TaCredentials);
+      setUsername('');
+      setPassword('');
+      console.log(res);
       setIsUpdating(false);
+      
     } catch (err) {
+      if (err === errorCodes.INVALID_CREDENTIALS) {
+        setIsUpdating(false);
+        setIsInvalid(true);
+        setPassword('');
+      }
       console.log(err);
     } 
   };
@@ -35,6 +50,8 @@ const TaCredentialsPage = (props: {
               placeholder='Username'
               setValue={setUsername}
               value={username}
+              isInvalid={isInvalid}
+              xIcon={true}
             />
 
             <InputBox
@@ -42,6 +59,7 @@ const TaCredentialsPage = (props: {
               secureTextEntry={true}
               setValue={setPassword}
               value={password}
+              isInvalid={isInvalid}
             />
             {isUpdating ? <Spinner/> : null}
             <Button 

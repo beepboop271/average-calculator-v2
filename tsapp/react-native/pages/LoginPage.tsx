@@ -6,7 +6,12 @@ import {GoogleSignin, User, statusCodes, GoogleSigninButton} from '@react-native
 import InputBox from '../components/InputBox';
 
 
-const Line = (): JSX.Element => {
+interface Props {
+  setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
+};
+
+
+const Line: React.FC = () => {
   return (
     <View style={styles.lineContainer}>
         <View style={styles.line} />
@@ -16,15 +21,12 @@ const Line = (): JSX.Element => {
   );
 };
 
-
-const LoginPage = (props: {
-  setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>,
-}): JSX.Element => {
+const LoginPage: React.FC<Props> = ({setLoggedIn}) => {
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
 
   const [userInfo, setUserInfo] = useState<User | null>(null);
-
+  const [isInvalid, setIsInvalid] = useState<boolean>(false);
 
   const signIn = async () => {
     try {
@@ -39,7 +41,7 @@ const LoginPage = (props: {
                                     .signInWithCredential(credential);
       // setFirebaseUser(firebaseUserCredential.user);
       // console.log(firebaseUserCredential);
-      props.setLoggedIn(true);
+      setLoggedIn(true);
 
     } catch (err) {
       if (err.code === statusCodes.SIGN_IN_CANCELLED) {
@@ -73,6 +75,8 @@ const LoginPage = (props: {
             value={username}
             autoCompleteType='username'
             setValue={setUsername}
+            isInvalid={isInvalid}
+            xIcon={true}
           />
           <InputBox 
             placeholder='Password' 
@@ -80,6 +84,7 @@ const LoginPage = (props: {
             autoCompleteType='password'
             secureTextEntry={true}
             setValue={setPassword}
+            isInvalid={isInvalid}
           />
         </Form>
         <Button primary style={styles.button}>

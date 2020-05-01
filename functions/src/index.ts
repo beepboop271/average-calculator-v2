@@ -67,38 +67,37 @@ export const onMarkUpdate = functions.firestore
   } else {
     console.log('no change');
   }
+
   return Promise.resolve();
 });
 
-export const updateTaCredentials = functions.https.onRequest(async (req, res) => {
-  try {
-    //I probably need to parse this but that's after I finish front end
-    console.log(req.body);
-    //search the user by its uid
-    const user =  req.body;
-    const userSnapshot = await db.collection('users')
-          .where('uid', '==', user.uid)
-          .get();
-    if (userSnapshot.empty) {
-      await db.collection('users').add({
-        username: user.username,
-        password: user.password,
-        uid: user.uid
-      });
-      res.send('new user document added');
+
+export const sendNotification = functions.https.onRequest(async (req, res) => {
+
+  const usersSnapshot = await db.collection('users').get();
+  usersSnapshot.forEach(async userSnap => {
+    try {
+      const msg = {
+        data: {
+          hi: 'sdf',
+          hello: 'hi'
+        },
+        token: userSnap.data().fcmToken,
+        notification: {
+          title: 'this is a title',
+          body: 'hello world'
+        }
+      };
+
+      const msgRes = await admin.messaging().send(msg);
+      console.log(msgRes);
+
+    } catch (err) {
+      console.log(err);
     }
     
-    if (userSnapshot.size > 1) {
-      console.warn('multiple instances of the same user has been found');
-    }
-    await db.collection('users').doc(userSnapshot.docs[0].id).update({
-      username: user.username,
-      password: user.password
-    });
-    res.send('successfully updated');
-  } catch (e) {
-    throw e;
-  }
+  });
+  res.send('yayyyy');
 });
 
 
@@ -142,6 +141,7 @@ function getDate(): string {
     return `Sep ${now.getFullYear()}`;
   }
 }
+
 
 async function updateFirestoreData(taCourses: ICourse[], userId: string) {
   return Promise.all(taCourses.map(async (course: ICourse) => {

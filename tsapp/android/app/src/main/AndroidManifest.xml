@@ -1,7 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.tsapp">
+  package="com.tsapp"
+  xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
       android:name=".MainApplication"
@@ -22,6 +30,50 @@
         </intent-filter>
       </activity>
       <activity android:name="com.facebook.react.devsupport.DevSettingsActivity" />
+    
+      <!-- [START firebase_service] -->
+      <!-- <service
+          android:name=".java.MyFirebaseMessagingService"
+          android:exported="false">
+          <intent-filter>
+              <action android:name="com.google.firebase.MESSAGING_EVENT" />
+          </intent-filter>
+      </service>
+      <service android:name="io.invertase.firebase.messaging.RNFirebaseBackgroundMessagingService" /> -->
+        <meta-data
+          android:name="com.google.firebase.messaging.default_notification_icon"
+          android:resource="@drawable/ic_small" />
+        <service android:name="io.invertase.firebase.messaging.RNFirebaseMessagingService">
+          <intent-filter>
+            <action android:name="com.google.firebase.MESSAGING_EVENT" />
+          </intent-filter>
+        </service>
+        
+        <service android:name="io.invertase.firebase.messaging.RNFirebaseInstanceIdService">
+          <intent-filter>
+            <action android:name="com.google.firebase.INSTANCE_ID_EVENT"/>
+          </intent-filter>
+        </service>
+
+        <service android:name="io.invertase.firebase.messaging.RNFirebaseBackgroundMessagingService" />
+
+        <receiver android:name="io.invertase.firebase.notifications.RNFirebaseNotificationReceiver"/>
+          <receiver 
+            android:enabled="true" android:exported="true"  
+            android:name="io.invertase.firebase.notifications.RNFirebaseNotificationsRebootReceiver">
+          <intent-filter>
+              <action android:name="android.intent.action.BOOT_COMPLETED"/>
+              <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+              <category android:name="android.intent.category.DEFAULT" />
+          </intent-filter>
+      </receiver>
+      
+      <meta-data
+        android:name="com.google.firebase.messaging.default_notification_channel_id"
+        android:value="default_notification_channel_id" 
+        tools:replace="android:value" />
+        
+        <!-- firebase messaging -->
     </application>
 
 </manifest>

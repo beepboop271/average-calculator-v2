@@ -3,10 +3,13 @@ import {Container, Content, Button, Text, Spinner} from 'native-base';
 import {GoogleSignin} from '@react-native-community/google-signin';
 import {firebase, FirebaseAuthTypes} from '@react-native-firebase/auth';
 
-const HomePage = (props: {
-  setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>,
-  firebaseUserInfo: FirebaseAuthTypes.User|null
-}) => {
+
+interface Props {
+  setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
+  firebaseUserInfo: FirebaseAuthTypes.User|null;
+};
+
+const HomePage: React.FC<Props> = ({setLoggedIn, firebaseUserInfo}) => {
   const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
 
   const signOut = async () => {
@@ -17,7 +20,7 @@ const HomePage = (props: {
       await firebase.auth().signOut();
       // setFirebaseUserInfo(null);
       setIsSigningOut(false);
-      props.setLoggedIn(false);
+      setLoggedIn(false);
     } catch (err) {
       console.log(err);
     }
@@ -29,7 +32,7 @@ const HomePage = (props: {
         <Button onPress={signOut}>
           <Text>Sign out</Text>
         </Button>
-        <Button onPress={() => console.log(props.firebaseUserInfo?.uid)}>
+        <Button onPress={() => console.log(firebaseUserInfo?.uid)}>
           <Text>Uid</Text>
         </Button>
         {
