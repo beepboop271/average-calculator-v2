@@ -1,12 +1,13 @@
 import React, {useState, useEffect} from 'react';
 import {Container, Content, Button, Text, Spinner} from 'native-base';
 import {GoogleSignin} from '@react-native-community/google-signin';
-import {firebase, FirebaseAuthTypes} from '@react-native-firebase/auth';
+// import {firebase, FirebaseAuthTypes} from '@react-native-firebase/auth';
+import firebase, {RNFirebase} from 'react-native-firebase';
 
 
 interface Props {
   setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
-  firebaseUserInfo: FirebaseAuthTypes.User|null;
+  firebaseUserInfo: RNFirebase.auth.OrNull<RNFirebase.User>;
 };
 
 const HomePage: React.FC<Props> = ({setLoggedIn, firebaseUserInfo}) => {

@@ -1,7 +1,8 @@
 import React, {useState, useEffect} from 'react';
 import {Container, Header, Content, Form, Item, Input, Button, Text} from 'native-base';
 import {StyleSheet, View} from 'react-native';
-import {FirebaseAuthTypes, firebase} from '@react-native-firebase/auth';
+// import {FirebaseAuthTypes, firebase} from '@react-native-firebase/auth';
+import firebase, {RNFirebase} from 'react-native-firebase';
 import {GoogleSignin, User, statusCodes, GoogleSigninButton} from '@react-native-community/google-signin';
 import InputBox from '../components/InputBox';
 

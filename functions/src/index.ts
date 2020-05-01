@@ -84,7 +84,7 @@ export const sendNotification = functions.https.onRequest(async (req, res) => {
         },
         token: userSnap.data().fcmToken,
         notification: {
-          title: 'this is a title',
+          title: 'kmskmssm',
           body: 'hello world'
         }
       };
