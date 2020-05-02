@@ -3,11 +3,10 @@ import {StyleSheet, View, Text} from 'react-native';
 import {Container, Content, Spinner} from 'native-base';
 import {GoogleSignin, User, statusCodes} from '@react-native-community/google-signin';
 import AsyncStorage from '@react-native-community/async-storage';
-//index.d.ts so sketched, two interface with the same name
-import PushNotification, {PushNotification as IPushNotification} from 'react-native-push-notification';
+
+import notifee from '@notifee/react-native';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 import messaging, {FirebaseMessagingTypes} from '@react-native-firebase/messaging';
-import * as Notifications from 'expo-notifications';
 
 
 import LoginPage from './react-native/pages/LoginPage';
@@ -56,6 +55,8 @@ const App = () => {
         await AsyncStorage.setItem('fcmToken', fcmToken);
         await updateToken();
       }
+    } else {
+      throw new Error('no permission');
     }
   };
 
@@ -70,26 +71,29 @@ const App = () => {
     });
   }, []);
 
-  // const handleNotification = (notification: IPushNotification) => {
-  //   console.log(notification);
+  // const handleNotification = (message: FirebaseMessagingTypes.RemoteMessage) => {
+  //   if (message.data) {
+  //     notifee.displayNotification({
+  //       title: 'local',
+  //       body: 'notification',
+  //       android: {
+  //         channelId: 'this'
+  //       }
+  //     });
+  //   }
+  //   console.log(message.data);
   // };
 
-  
   // useEffect(() => {
   //   (async() => {
-  //     try {
-  //       console.log(await Notifications.getNotificationChannelsAsync());
-  //     } catch (err) {
-  //       console.log(err);
-  //     }
-      
+  //     await notifee.deleteChannel('this');
+  //     console.log(await notifee.getChannels());
   //   })();
-  //   // PushNotification.configure({
-  //   //   onNotification: handleNotification,
-  //   //   popInitialNotification: true,
-  //   //   onRegister: setToken
-  //   // });
+
+
+    
   // }, []);
+
 
   //checks if the user is signed in
   useEffect(() => {
@@ -131,11 +135,13 @@ const App = () => {
         await AsyncStorage.setItem('fcmToken', fcmToken);
         updateToken();
       });
-      messaging().setBackgroundMessageHandler(async (remoteMessages) => {
+      messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+        // handleNotification(remoteMessage);
         console.log('background message: ');
-        console.log(remoteMessages);
+        console.log(remoteMessage);
       });
       messaging().onMessage(async remoteMessage => {
+        // handleNotification(remoteMessage);
         console.log('foreground message: ');
         console.log(remoteMessage);
       });

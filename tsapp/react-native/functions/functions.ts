@@ -1,5 +1,4 @@
 import firestore from '@react-native-firebase/firestore';
-import axios from 'axios';
 
 export const errorCodes = {
   INVALID_CREDENTIALS: 0
@@ -26,14 +25,18 @@ export const updateTaCredentials = (taCredentials: TaCredentials): Promise<unkno
         const user = new FormData();
         user.append('username', taCredentials.username);
         user.append('password', taCredentials.password);
-        //test credentials before updating
-        const homePage: string = (await axios.post(
-          "https://ta.yrdsb.ca/yrdsb/index.php",
-          user,
-          {headers: {'Content-Type': 'multipart/form-data'}}
-        )).data;
 
-        if (/Invalid Login/.test(homePage)) reject(errorCodes.INVALID_CREDENTIALS);
+        const res = await fetch('https://ta.yrdsb.ca/yrdsb/index.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          body: user
+        });
+
+        if (JSON.stringify(res).includes('error_message=3')) reject(errorCodes.INVALID_CREDENTIALS);
+
+        // if (/Invalid Login/.test(homePage)) reject(errorCodes.INVALID_CREDENTIALS);
         resolve(await updateCredentials(taCredentials));
 
       } catch (e) {

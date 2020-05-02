@@ -240,6 +240,8 @@ dependencies {
     implementation 'com.google.firebase:firebase-messaging:20.1.6'
     // implementation 'com.google.firebase:firebase-inappmessaging:19.0.6'
     // implementation 'com.google.firebase:firebase-inappmessaging-display:19.0.6'
+    //known issue of duplicating classes from different dependencies
+    implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
     
     //noinspection GradleDynamicVersion
     implementation "com.facebook.react:react-native:+"  // From node_modules

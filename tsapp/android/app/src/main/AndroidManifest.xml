@@ -43,7 +43,7 @@
           </intent-filter>
         </service> -->
         
-        <!-- <service android:name="io.invertase.firebase.messaging.RNFirebaseInstanceIdService">
+        <service android:name="io.invertase.firebase.messaging.RNFirebaseInstanceIdService">
           <intent-filter>
             <action android:name="com.google.firebase.INSTANCE_ID_EVENT"/>
           </intent-filter>
@@ -60,7 +60,7 @@
               <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
               <category android:name="android.intent.category.DEFAULT" />
           </intent-filter>
-      </receiver> -->
+      </receiver>
 
 
       <!-- react native push notification -->
@@ -69,23 +69,23 @@
         <meta-data  android:name="com.dieam.reactnativepushnotification.notification_channel_description"
                     android:value="YOUR NOTIFICATION CHANNEL DESCRIPTION"/> -->
         <!-- Change the resource name to your App's accent color - or any other color you want -->
-        <meta-data  android:name="com.dieam.reactnativepushnotification.notification_color"
-                    android:resource="@color/white"/> <!-- or @android:color/{name} to use a standard color -->
+        <!-- <meta-data  android:name="com.dieam.reactnativepushnotification.notification_color"
+                    android:resource="@color/white"/> <! or @android:color/{name} to use a standard color -->
 
-        <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationPublisher" />
+        <!-- <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationPublisher" />
         <receiver android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationBootEventReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
-        </receiver>
+        </receiver> -->
 
-        <service
+        <!-- <service
             android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationListenerService"
             android:exported="false" >
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
-        </service>
+        </service> -->
       
       <meta-data
         android:name="com.google.firebase.messaging.default_notification_channel_id"
