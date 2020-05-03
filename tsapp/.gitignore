@@ -1,5 +1,6 @@
 google-services.json
-
+keys.js
+index.android.bundle
 
 # OSX
 #
@@ -39,7 +40,6 @@ local.properties
 # node.js
 #
 node_modules/
-utils/
 npm-debug.log
 yarn-error.log
 
