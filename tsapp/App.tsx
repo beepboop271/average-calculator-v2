@@ -1,6 +1,4 @@
 import React, {useState, useEffect} from 'react';
-import {StyleSheet, View, Text} from 'react-native';
-import {Container, Content, Spinner} from 'native-base';
 import {GoogleSignin, User, statusCodes} from '@react-native-community/google-signin';
 import AsyncStorage from '@react-native-community/async-storage';
 import notifee from '@notifee/react-native';
