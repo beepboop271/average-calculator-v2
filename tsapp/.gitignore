@@ -39,7 +39,7 @@ local.properties
 # node.js
 #
 node_modules/
-utils/
+keys.js
 npm-debug.log
 yarn-error.log
 

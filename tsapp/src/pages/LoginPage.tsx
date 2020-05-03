@@ -1,15 +1,20 @@
-import React, {useState, useEffect} from 'react';
-import {Container, Header, Content, Form, Item, Input, Button, Text} from 'native-base';
+import React, {useState, useEffect, useContext} from 'react';
+import {Image} from 'react-native';
+import {Container, Content, Form, Item, Button, Text} from 'native-base';
 import {StyleSheet, View} from 'react-native';
-// import {FirebaseAuthTypes, firebase} from '@react-native-firebase/auth';
-// import firebase, {RNFirebase} from 'react-native-firebase';
 import auth from '@react-native-firebase/auth';
-import {GoogleSignin, User, statusCodes, GoogleSigninButton} from '@react-native-community/google-signin';
+import {
+  GoogleSignin, 
+  User, 
+  statusCodes, 
+  GoogleSigninButton
+} from '@react-native-community/google-signin';
 import InputBox from '../components/InputBox';
+import {UserContext} from '../utils/contexts';
 
 
 interface Props {
-  setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
+  navigation: any;
 };
 
 
@@ -23,12 +28,16 @@ const Line: React.FC = () => {
   );
 };
 
-const LoginPage: React.FC<Props> = ({setLoggedIn}) => {
-  const [username, setUsername] = useState<string>('');
+const LoginPage: React.FC<Props> = ({navigation}) => {
+  const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
 
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [isInvalid, setIsInvalid] = useState<boolean>(false);
+
+  const {setLoggedIn} = useContext(UserContext);
+  if (!setLoggedIn) throw new Error('setLoggedIn provider missing');
+
 
   const signIn = async () => {
     try {
@@ -41,8 +50,6 @@ const LoginPage: React.FC<Props> = ({setLoggedIn}) => {
                           .credential(tokens.idToken, tokens.accessToken);
       const firebaseUserCredential = await auth()
                                     .signInWithCredential(credential);
-      // setFirebaseUser(firebaseUserCredential.user);
-      // console.log(firebaseUserCredential);
       setLoggedIn(true);
 
     } catch (err) {
@@ -61,10 +68,8 @@ const LoginPage: React.FC<Props> = ({setLoggedIn}) => {
 
   return (
     <Container>
-      <Header>
-        <Text>style this text later</Text>
-      </Header>
       <Content style={styles.content}>
+        <Image source={require('../assets/logo.png')} style={styles.logo}/>
         <GoogleSigninButton
           size={GoogleSigninButton.Size.Wide}
           color={GoogleSigninButton.Color.Dark}
@@ -73,10 +78,10 @@ const LoginPage: React.FC<Props> = ({setLoggedIn}) => {
         <Line/>
         <Form>
           <InputBox 
-            placeholder='Username' 
-            value={username}
-            autoCompleteType='username'
-            setValue={setUsername}
+            placeholder='Email' 
+            value={email}
+            autoCompleteType='email'
+            setValue={setEmail}
             isInvalid={isInvalid}
             xIcon={true}
           />
@@ -100,8 +105,7 @@ const LoginPage: React.FC<Props> = ({setLoggedIn}) => {
 
 const styles = StyleSheet.create({
   content: {
-    padding: '10%',
-    paddingTop: '40%'
+    padding: '10%'
   },
   button: {
     width: '50%',
@@ -129,6 +133,13 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginBottom: 5,
     flexDirection: 'row'
+  },
+  logo: {
+    width: 170,
+    height: 170,
+    alignSelf: 'center',
+    marginTop: '10%',
+    marginBottom: '5%'
   }
 });
 

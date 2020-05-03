@@ -1,21 +1,27 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useContext} from 'react';
 import {Container, Header, Content, Form, Button, Text, Spinner} from 'native-base';
 import {StyleSheet, View} from 'react-native';
-import axios from 'axios';
 
 
 import InputBox from '../components/InputBox';
-import {updateTaCredentials as updateTa, TaCredentials, errorCodes} from '../functions/functions';
+import HeaderVav from '../components/HeaderNav';
+import SplashScreen from '../components/SplashScreen';
+import {UserContext} from '../utils/contexts';
+import {updateTaCredentials as updateTa, errorCodes} from '../utils/functions';
 
 interface Props {
-  uid: string|undefined;
+  navigation: any;
 };
 
-const TaCredentialsPage: React.FC<Props> = ({uid})  => {
+
+const TaCredentialsPage: React.FC<Props> = ({navigation})  => {
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isInvalid, setIsInvalid] = useState<boolean>(false);
+
+  const {uid} = useContext(UserContext);
+  if (!uid) return <SplashScreen/>
 
   const updateTaCredentials = async () => {
     try {
@@ -25,7 +31,7 @@ const TaCredentialsPage: React.FC<Props> = ({uid})  => {
         uid: uid,
         username: username,
         password: password
-      } as TaCredentials);
+      });
       setUsername('');
       setPassword('');
       console.log(res);
@@ -43,6 +49,7 @@ const TaCredentialsPage: React.FC<Props> = ({uid})  => {
 
   return (
     <Container>
+      <HeaderVav heading='Update TA info' toggleDrawer={navigation.toggleDrawer}/>
       <Content>
         <View style={styles.content}>
           <Form>

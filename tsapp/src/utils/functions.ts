@@ -1,5 +1,7 @@
 import firestore from '@react-native-firebase/firestore';
 
+
+
 export const errorCodes = {
   INVALID_CREDENTIALS: 0
 };
@@ -13,8 +15,14 @@ export interface TaCredentials {
 export interface FcmToken {
   uid: string;
   fcmToken: string;
-}
+};
 
+export interface NotificationSettings {
+  uid: string;
+  notifcationEnabled: boolean;
+};
+
+//checks if ta credentials are valid, then update to firestore
 export const updateTaCredentials = (taCredentials: TaCredentials): Promise<unknown> => {
   return new Promise(async(resolve, reject) => {
       try {
@@ -36,7 +44,6 @@ export const updateTaCredentials = (taCredentials: TaCredentials): Promise<unkno
 
         if (JSON.stringify(res).includes('error_message=3')) reject(errorCodes.INVALID_CREDENTIALS);
 
-        // if (/Invalid Login/.test(homePage)) reject(errorCodes.INVALID_CREDENTIALS);
         resolve(await updateCredentials(taCredentials));
 
       } catch (e) {
@@ -49,13 +56,18 @@ export const updateFcmToken = (fcmToken: FcmToken) => {
   return updateCredentials(fcmToken);
 }
 
-const updateCredentials = (credentials: TaCredentials|FcmToken) => {
+export const updateNotificationSettings = (notificationPermission: NotificationSettings) => {
+  return updateCredentials(notificationPermission);
+};
+
+
+//updating to cloud firestore
+const updateCredentials = (credentials: TaCredentials|FcmToken|NotificationSettings) => {
   return new Promise(async (resolve, reject) => {
     try {
       const userSnapshot = await firestore().collection('users')
             .where('uid', '==', credentials.uid)
             .get();
-
       if (userSnapshot.size > 1) reject('Multiple user entries found');
       if (userSnapshot.empty) {
         await firestore().collection('users').add(credentials);
@@ -71,5 +83,5 @@ const updateCredentials = (credentials: TaCredentials|FcmToken) => {
       reject(err);
     }
   });
-  
 };
+
