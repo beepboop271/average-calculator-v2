@@ -5,6 +5,7 @@ import notifee from '@notifee/react-native';
 import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 import messaging, {FirebaseMessagingTypes} from '@react-native-firebase/messaging';
 
+import {Root} from 'native-base';
 import {NavigationContainer} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 
@@ -17,15 +18,17 @@ import {
   updateNotificationSettings
 } from './src/utils/functions';
 import {WEB_CLIENT_ID} from './keys.js';
+import EmailConfirmationModal from './src/components/EmailConfirmationModal';
 
 
 const Stack = createStackNavigator();
 
 const App = () => {
   const [firebaseUserInfo, setFirebaseUserInfo] = useState<FirebaseAuthTypes.User|null>(null);
-  const [userInfo, setUserInfo] = useState<User|null>(null);
+  // const [userInfo, setUserInfo] = useState<User|null>(null);
   const [loggedIn, setLoggedIn] = useState<boolean>(false);
   const [initializing, setInitializing] = useState<boolean>(true);
+  const [emailVerified, setEmailVerified] = useState<boolean>(false);
 
   //update fcm token to the cloud
   const updateToken = async () => {
@@ -113,25 +116,32 @@ const App = () => {
       setFirebaseUserInfo(user);
 
       //get google sign in not firebase sign in
-      (async () => {
-        try {
-          const signedIn = await GoogleSignin.isSignedIn();
-          if (signedIn) {
-            const curUser = await GoogleSignin.getCurrentUser();
-            setUserInfo(curUser);
-            if (user && curUser) setLoggedIn(true);
-          }
-          setInitializing(false);
+      // (async () => {
+      //   try {
+          // const signedIn = await GoogleSignin.isSignedIn();
+          // if (signedIn) {
+          //   const curUser = await GoogleSignin.getCurrentUser();
+          //   setUserInfo(curUser);
+          //   if (user && curUser) setLoggedIn(true);
+          // }
+      //     setInitializing(false);
 
-        } catch (err) {
-          if (err.code === statusCodes.SIGN_IN_REQUIRED) {
-            setLoggedIn(false);
-            setInitializing(false);
-          } else {
-            console.log(err);
-          }
-        }
-      })();
+      //   } catch (err) {
+      //     if (err.code === statusCodes.SIGN_IN_REQUIRED) {
+      //       setLoggedIn(false);
+      //       setInitializing(false);
+      //     } else {
+      //       console.log(err);
+      //     }
+      //   }
+      // })();
+      if (user) {
+        setLoggedIn(true);
+        setEmailVerified(firebaseUserInfo?.emailVerified || false);
+      } else {
+        setLoggedIn(false);
+      }
+      setInitializing(false);
     });
     return unsubscribe;
   }, [loggedIn]);
@@ -160,40 +170,57 @@ const App = () => {
     }
   }, [loggedIn]);
 
+  //refreshes the user
+  const refreshEmailVerification = async (
+    setIsRefreshing: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    setIsRefreshing(true);
+    await auth().currentUser?.reload();
+    setFirebaseUserInfo(auth().currentUser);
+    setEmailVerified(firebaseUserInfo?.emailVerified || false);
+    setIsRefreshing(false);
+  };
+
   if (initializing) {
     return <SplashScreen/>
+  }
+
+  if (loggedIn && !emailVerified) {
+    return <EmailConfirmationModal refresh={refreshEmailVerification}/>
   }
 
   const userContext: IUserContext = {
     setLoggedIn: setLoggedIn,
     uid: firebaseUserInfo?.uid,
-    isLoggedIn: loggedIn
+    name: firebaseUserInfo?.displayName || undefined,
+    isLoggedIn: loggedIn,
   };
 
-  return (
-    <UserContext.Provider value={userContext}>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{
-          headerShown: false
-        }}>
-          {loggedIn ? (
-            <Stack.Screen
-              name='LoggedInPage'
-              component={LoggedInPage}
-            />
-          ) : (
-            <Stack.Screen 
-              name='LoginPage' 
-              component={LoginPage}
-              options={{
-                animationTypeForReplace: loggedIn ? 'push' : 'pop',
-              }}
-            />
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
-    </UserContext.Provider>
-    
+  return ( //don't question the amount of wraps
+    <Root>
+      <UserContext.Provider value={userContext}>
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{
+            headerShown: false
+          }}>
+            {loggedIn ? (
+              <Stack.Screen
+                name='LoggedInPage'
+                component={LoggedInPage}
+              />
+            ) : (
+              <Stack.Screen 
+                name='LoginPage' 
+                component={LoginPage}
+                options={{
+                  animationTypeForReplace: loggedIn ? 'push' : 'pop',
+                }}
+              />
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </UserContext.Provider>
+    </Root>
   );
 
 }

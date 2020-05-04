@@ -69,8 +69,14 @@ const updateCredentials = (credentials: TaCredentials|FcmToken|NotificationSetti
             .where('uid', '==', credentials.uid)
             .get();
       if (userSnapshot.size > 1) reject('Multiple user entries found');
+
+      //new user setup, add default values
       if (userSnapshot.empty) {
-        await firestore().collection('users').add(credentials);
+        const data = {
+          ...credentials,
+          precision: 1 //ta avg precision
+        };
+        await firestore().collection('users').add(data);
         resolve('New user added');
       }
 

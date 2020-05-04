@@ -4,11 +4,13 @@ import React from 'react';
 export interface IUserContext {
   setLoggedIn: React.Dispatch<React.SetStateAction<boolean>>|undefined;
   uid: string|undefined;
+  name: string|undefined;
   isLoggedIn: boolean;
 };
 
 export const UserContext = React.createContext<IUserContext>({
   setLoggedIn: undefined,
   uid: undefined,
-  isLoggedIn: false
+  name: undefined,
+  isLoggedIn: false,
 });

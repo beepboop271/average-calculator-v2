@@ -1,12 +1,12 @@
 import React, {useState, useEffect, useContext} from 'react';
-import {Container, Header, Content, Form, Button, Text, Spinner} from 'native-base';
+import {Container, Content, Form, Button, Text, Spinner, Toast} from 'native-base';
 import {StyleSheet, View} from 'react-native';
-
 
 import InputBox from '../components/InputBox';
 import HeaderVav from '../components/HeaderNav';
 import SplashScreen from '../components/SplashScreen';
 import {UserContext} from '../utils/contexts';
+import {createToast} from '../utils/toast';
 import {updateTaCredentials as updateTa, errorCodes} from '../utils/functions';
 
 interface Props {
@@ -20,8 +20,10 @@ const TaCredentialsPage: React.FC<Props> = ({navigation})  => {
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isInvalid, setIsInvalid] = useState<boolean>(false);
 
+
   const {uid} = useContext(UserContext);
   if (!uid) return <SplashScreen/>
+
 
   const updateTaCredentials = async () => {
     try {
@@ -36,12 +38,24 @@ const TaCredentialsPage: React.FC<Props> = ({navigation})  => {
       setPassword('');
       console.log(res);
       setIsUpdating(false);
+
+      //hehe res is string whereas error code is int so I didn't use !==
+      if (res != errorCodes.INVALID_CREDENTIALS) {
+        createToast({
+          text: 'Successfully updated!',
+          type: 'success'
+        });
+      }
       
     } catch (err) {
       if (err === errorCodes.INVALID_CREDENTIALS) {
         setIsUpdating(false);
         setIsInvalid(true);
         setPassword('');
+        createToast({
+          text: 'Invalid username or password!',
+          type: 'danger'
+        });
       }
       console.log(err);
     } 
@@ -54,19 +68,25 @@ const TaCredentialsPage: React.FC<Props> = ({navigation})  => {
         <View style={styles.content}>
           <Form>
             <InputBox
+              icon='md-person'
               placeholder='Username'
               setValue={setUsername}
               value={username}
               isInvalid={isInvalid}
+              setIsInvalid={setIsInvalid}
               xIcon={true}
+              disabled={isUpdating}
             />
 
             <InputBox
+              icon='lock'
               placeholder='Password'
               secureTextEntry={true}
               setValue={setPassword}
               value={password}
               isInvalid={isInvalid}
+              setIsInvalid={setIsInvalid}
+              disabled={isUpdating}
             />
             {isUpdating ? <Spinner/> : null}
             <Button 
@@ -83,10 +103,11 @@ const TaCredentialsPage: React.FC<Props> = ({navigation})  => {
   );
 };
 
+
 const styles = StyleSheet.create({
   content: {
-    padding: '20%',
-    paddingTop: '30%'
+    padding: '15%',
+    paddingTop: '25%'
   },
   button: {
     marginRight: 'auto',

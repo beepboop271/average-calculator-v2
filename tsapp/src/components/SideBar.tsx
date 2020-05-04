@@ -21,8 +21,11 @@ const SideBar: React.FC<DrawerContentComponentProps<DrawerContentOptions>> = (pr
 
   const signOut = async() => {
     try {
-      await GoogleSignin.revokeAccess();
-      await GoogleSignin.signOut();
+      const signedIn = await GoogleSignin.isSignedIn();
+      if (signedIn) { //sign out of google if it's signed in
+        await GoogleSignin.revokeAccess();
+        await GoogleSignin.signOut();
+      }
       await auth().signOut();
       setLoggedIn(false);
     } catch (err) {

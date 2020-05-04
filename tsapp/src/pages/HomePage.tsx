@@ -12,7 +12,7 @@ interface Props {
 
 const HomePage: React.FC<Props> = ({navigation}) => {
 
-  const {uid} = useContext(UserContext);
+  const {uid, name} = useContext(UserContext);
   if (!uid) return <SplashScreen/>
 
   return (
@@ -20,7 +20,7 @@ const HomePage: React.FC<Props> = ({navigation}) => {
       <HeaderVav heading='Home' toggleDrawer={navigation.toggleDrawer}/>
       <Content style={styles.content}>
         <Button onPress={() => console.log(uid)}>
-          <Text>console.log(uid)</Text>
+          <Text>hi {name} console.log(uid)</Text>
         </Button>
       </Content>
     </Container>
