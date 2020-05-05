@@ -139,6 +139,7 @@ const App = () => {
     setLoggedIn: setLoggedIn,
     uid: firebaseUserInfo?.uid,
     name: firebaseUserInfo?.displayName || undefined,
+    isLoggedIn: loggedIn,
     loggedInFromTa: loggedInFromTa,
     setLoggedInFromTa: setLoggedInFromTa
   };

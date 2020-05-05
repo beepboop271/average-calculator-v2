@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import rp from "request-promise-native";
+import _ from 'lodash';
 import { CookieJar } from "request";
 
 admin.initializeApp({
@@ -25,14 +26,14 @@ export const run = functions.https.onRequest(async (request, response) => {
   let taCourses: ICourse[];
   
   users.forEach(async userDoc => {
-    if (userDoc.exists) {
+    if (userDoc.exists && userDoc.data().username === '335432704') {
       try {
         console.log(`retrieving user ${userDoc.data().username}`)
         console.log(`retrieving from ta`);
         taCourses = await getFromTa(<IUser>userDoc.data());
 
         await updateFirestoreData(taCourses, userDoc.data().uid);
-        console.log(JSON.stringify(taCourses, null, 2));
+        // console.log(JSON.stringify(taCourses, null, 2));
         
       } catch (e) {
         console.log(e);
@@ -40,35 +41,6 @@ export const run = functions.https.onRequest(async (request, response) => {
     }
   });
   response.send("Hello from Firebase!");
-});
-
-
-export const onMarkUpdate = functions.firestore
-      .document('courses/{course}/assessments/{assessment}')
-      .onWrite((change, context) => {
-  const oldAssessment: FirebaseFirestore.DocumentData = change.before.data();
-  const assessment: FirebaseFirestore.DocumentData = change.after.data();
-
-  if (!change.before.exists) {
-    console.log(`new mark: ${assessment.courseName}`);
-    console.log(`assessment: ${assessment.name}`);
-    console.log(`user: ${assessment.userId}`);
-    console.log(assessment);
-  } else if (!change.after.exists) {
-    console.log(`assessment deleted: ${oldAssessment.name}`);
-    console.log(`user: ${oldAssessment.userId}`);
-    console.log(oldAssessment);
-  } else if (oldAssessment !== assessment) {
-    console.log(`updated mark: ${assessment.courseName}`);
-    console.log(`assessment: ${assessment.name}`);
-    console.log(`user: ${assessment.userId}`);
-    console.log(oldAssessment);
-    console.log(assessment);
-  } else {
-    console.log('no change');
-  }
-
-  return Promise.resolve();
 });
 
 
@@ -218,7 +190,6 @@ async function updateFirestoreData(taCourses: ICourse[], userId: string) {
       }
 
       return Promise.all([
-        deleteRemovedAssessments(course, courseRef),
         updateAssessments(course, courseRef, userId)
       ]);
     } catch (e) {
@@ -229,45 +200,6 @@ async function updateFirestoreData(taCourses: ICourse[], userId: string) {
   }));
 }
 
-//in case a teacher deletes an assessment from ta
-async function deleteRemovedAssessments(
-  course: ICourse, 
-  courseRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>, 
-) {
-  const firestoreAssessmentNames: string[] = (await courseRef.get())
-                                              .data().assessmentNames;
-  const assessmentNames: string[] = [];
-  course.assessments.forEach(assessment => {
-    assessmentNames.push(assessment.name);
-  });
-  const removedAssessments = firestoreAssessmentNames.filter((name: string) => {
-    return !assessmentNames.includes(name);
-  })
-
-  //if there aren't any removed assessments
-  if (removedAssessments.length == 0) {
-    return courseRef.update({assessmentNames: assessmentNames});
-  }
-
-  const assessmentsRef = courseRef.collection('assessments');
-  const removedAssessmentsSnapshot = await assessmentsRef
-                                      .where('name', 'in', removedAssessments)
-                                      .get();
-
-  //this shouldn't happen unless something really wrong happens
-  let deletePromise: Promise<FirebaseFirestore.WriteResult[]>;
-  if (removedAssessmentsSnapshot.empty) {
-    console.warn('Unable to find removed assessments');
-  } else {
-    deletePromise = Promise.all(removedAssessmentsSnapshot.docs.map(snap => {
-      return assessmentsRef.doc(snap.id).delete();
-    }));
-  }
-  const updatePromise: Promise<FirebaseFirestore.WriteResult>
-        = courseRef.update({assessmentNames: assessmentNames});
-  return Promise.all([deletePromise, updatePromise]);
-}
-
 
 //update/create the assessment to the database
 async function updateAssessments(
@@ -275,88 +207,120 @@ async function updateAssessments(
   courseRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>, 
   userId: string
 ) {
+
   const assessmentsRef = courseRef.collection('assessments');
 
-  return Promise.all(course.assessments.map(async (assessment: IAssessment) => {
-    const assessmentSnapshot = await assessmentsRef
-          .where('userId', '==', userId)
-          .where('name', '==', assessment.name)
-          .get();
-    //add doc if its a new doc
-    if (assessmentSnapshot.empty) {
-      return assessmentsRef.add({
-        name: assessment.name,
-        userId: userId,
-        courseRef: courseRef,
-        courseName: course.name,
-        updatedTime: admin.firestore.FieldValue.serverTimestamp(),
-        ...assessment.marks
-      });
+  const assessmentsSnapShot = await assessmentsRef
+        .where('userId', '==', userId)
+        .orderBy('order')
+        .get();
+  const taAssessments: [IAssessment, number][] = course.assessments.map((assessment, index) => {
+    return [assessment, index];
+  });
+  
+  //udpate order of assessments and delete assessments
+  await Promise.all(assessmentsSnapShot.docs.map(async (assessmentDoc) => {
+    //comparing the assessments by stringifying them
+    const dbAssessment: IAssessment = {
+      name: assessmentDoc.get('name'),
+      marks: {
+        k: assessmentDoc.get('k'),
+        t: assessmentDoc.get('t'),
+        c: assessmentDoc.get('c'),
+        a: assessmentDoc.get('a'),
+        f: assessmentDoc.get('f')
+      }
+    };
+
+    const assessmentIdx = taAssessments.findIndex(assessmentStr => {
+      return _.isEqual(assessmentStr[0], dbAssessment);
+    });
+
+
+    //if assessment exists in db but not ta
+    if (assessmentIdx === -1) {
+      console.log('deleted assessment');
+      return assessmentsRef.doc(assessmentDoc.id).delete();
     }
-    //update marks if doc exists
-    return assessmentsRef.doc(assessmentSnapshot.docs[0].id).update(assessment.marks);
+
+    const order = taAssessments[assessmentIdx][1]; //the order of the assessment, for displaying reasons
+    taAssessments.splice(assessmentIdx, 1); //delete the string so no duplicates
+
+    //random assessment inserted in the middle of the table
+    if (order !== assessmentDoc.get('order')) {
+      return assessmentsRef.doc(assessmentDoc.id).update({order: order});
+    }
+    return Promise.resolve();
+  }));
+
+  // add the new documents/updating marks/weights
+  return Promise.all(taAssessments.map(async(taAssessment: [IAssessment, number]) => {
+    const assessment = taAssessment[0];
+    console.log('new mark');
+    sendMarkNotif(userId, course.name, assessment);
+    return assessmentsRef.add({
+      name: assessment.name,
+      userId: userId,
+      courseRef: courseRef,
+      courseName: course.name,
+      order: taAssessment[1],
+      ...assessment.marks
+    });
   }));
 }
 
 
-// async function getFromFirestore(user: IUser): Promise<ICourse[]> {
-//   const coursesRef = db.collection("courses");
-//   const date: string = getDate();
+function sendMarkNotif(
+  userId: string, 
+  courseName: string,
+  assessment: IAssessment
+) {
+  return new Promise(async(resolve, reject) => {
+    const userSnapshot = await db.collection('users')
+                                 .where('uid', '==', userId)
+                                 .get();
+    if (userSnapshot.size > 1) {
+      reject('more than one user entry found');
+    }
+    if (userSnapshot.empty) {
+      reject('no user entry is found');
+    }
 
-//   let snapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
+    let bodyText: string;
+    let assessmentAvg = getAssessmentAvg(assessment.marks);
+    const multiplyBy = Math.pow(100, userSnapshot.docs[0].data().precision);
+    assessmentAvg = Math.round(assessmentAvg*100*multiplyBy)/multiplyBy;
+    if (assessmentAvg) {
+      bodyText = `${assessment.name}: ${assessmentAvg}%`;
+    } else {
+      bodyText = `${assessment.name}: null`;
+    }
 
-//   const courseDocs = await Promise.all(
-//     user.courses.map(async (courseName: string) => {
-//       try {
-//         snapshot = await coursesRef
-//           .where("name", "==", courseName)
-//           .where("date", "==", date)
-//           .get();
-//       } catch (e) {
-//         console.error(`Failed to retrieve course {name: ${courseName}, date: ${date}}:\n${e}`);
-//         return null;
-//       }
+    resolve(admin.messaging().send({
+      token: userSnapshot.docs[0].data().fcmToken,
+      notification: {
+        title: courseName,
+        body: bodyText
+      }
+    }));
+  });
+}
 
-//       if (snapshot.empty) {
-//         console.error(`Found no such course {name: ${courseName}, date: ${date}}`);
-//         return null;
-//       } else if (snapshot.size > 1) {
-//         console.error(`Found more than one course {name: ${courseName}, date: ${date}}`);
-//         return null;
-//       } else {
-//         return snapshot.docs[0];
-//       }
-//     })
-//   );
 
-//   const courses: ICourse[] = [];
-//   let course: ICourse;
-
-//   for (const courseDoc of courseDocs) {
-//     if (courseDoc !== null) {
-//       course = <ICourse>courseDoc.data();
-
-//       if (!course.period || !course.room || !course.date || !course.name) {
-//         // shouldn't even be possible to miss date or name but whatever
-//         console.warn(`Course missing info fields (expected name, period, room, date):\n${JSON.stringify(course)}`);
-//       }
-
-//       if (!course.weights) {
-//         console.error(`Course missing weights:\n${JSON.stringify(course)}`);
-//       }
-
-//       snapshot = await courseDoc.ref.collection("assessments").get();
-//       if (snapshot.empty) {
-//         console.log(`No assessments found:\n${JSON.stringify(course)}`);
-//         course.assessments = [];
-//       } else {
-//         console.log("not implemented lmao");
-//         course.assessments = [];
-//       }
-//     }
-//   }
-//   return courses;
-// }
+function getAssessmentAvg(marks: {[strand: string]: IMark}) {
+  let sum: number = 0;
+  let totalWeight: number = 0;
+  Object.values(marks).forEach(mark => {
+    if (mark) {
+      sum += mark.numerator/mark.denominator*mark.weight;
+      totalWeight+=mark.weight;
+    }
+  });
+  if (totalWeight === 0) {
+    return null;
+  }
+  return sum/totalWeight;
+}
 
 
 async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
