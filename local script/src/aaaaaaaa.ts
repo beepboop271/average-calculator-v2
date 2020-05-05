@@ -431,23 +431,16 @@ function mergeCourseLists(
     localMap.set(course.name, course);
   }
 
-  const taNames: Set<string> = new Set<string>(
-    taCourses.map((course: Course): string => course.name)
-  );
-  const localNames: Set<string> = new Set<string>(
-    localCourses.map((course: Course): string => course.name)
-  );
-
-  for (const name of taNames) {
-    if (!localNames.has(name)) {
+  for (const [name, taCourse] of taMap) {
+    if (!localMap.has(name)) {
       console.log(`added ${name} to local courses`);
-      localCourses.push(taMap.get(name)!);
+      localCourses.push(taCourse);
     }
   }
 
-  for (const name of localNames) {
-    if (taNames.has(name)) {
-      mergeFromInto(taMap.get(name)!, localMap.get(name)!);
+  for (const [name, localCourse] of localMap) {
+    if (taMap.has(name)) {
+      mergeFromInto(taMap.get(name)!, localCourse);
     }
   }
 }
