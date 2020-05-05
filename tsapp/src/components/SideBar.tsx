@@ -11,13 +11,16 @@ import auth from '@react-native-firebase/auth';
 
 import {UserContext} from '../utils/contexts';
 import { GoogleSignin } from '@react-native-community/google-signin';
+import { setDBLoggedIn } from '../utils/functions';
+import SplashScreen from './SplashScreen';
+
 
 //this was one long component
 const SideBar: React.FC<DrawerContentComponentProps<DrawerContentOptions>> = (props) => {
 
   //signing out
-  const {setLoggedIn, loggedInFromTa} = useContext(UserContext);
-  if (!setLoggedIn) throw new Error('no provider for setLoggedIn in sidebar');
+  const {setLoggedIn, loggedInFromTa, uid} = useContext(UserContext);
+  if (!setLoggedIn || !uid) return <SplashScreen/>
 
   const signOut = async() => {
     try {
@@ -26,6 +29,7 @@ const SideBar: React.FC<DrawerContentComponentProps<DrawerContentOptions>> = (pr
         await GoogleSignin.revokeAccess();
         await GoogleSignin.signOut();
       }
+      await setDBLoggedIn({uid: uid, loggedIn: false});
       await auth().signOut();
       setLoggedIn(false);
     } catch (err) {

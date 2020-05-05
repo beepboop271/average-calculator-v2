@@ -15,7 +15,8 @@ import SplashScreen from './src/components/SplashScreen';
 import {UserContext, IUserContext} from './src/utils/contexts';
 import {
   updateFcmToken,
-  updateNotificationSettings
+  updateNotificationSettings,
+  setDBLoggedIn
 } from './src/utils/functions';
 import {WEB_CLIENT_ID} from './keys.js';
 
@@ -98,7 +99,13 @@ const App = () => {
 
         //force update the token to accomodate if there are multiple users
         //don't worry about the readability :))
-        (async() => {if (!(await getToken())) updateToken()})();
+        (async() => {
+          if (!(await getToken())) updateToken();
+          if (!user?.uid) throw new Error('missing uid');
+          setDBLoggedIn({uid: user?.uid, loggedIn: true});
+          if (!user.emailVerified) setLoggedInFromTa(true);
+        })();
+
         
         
       } else {

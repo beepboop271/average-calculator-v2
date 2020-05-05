@@ -17,64 +17,68 @@ interface IUser {
   courses: string[];
 }
 
-export const run = functions.https.onRequest(async (request, response) => {
-  const users = await db.collection("users").get();
+export const run = functions.pubsub.schedule('every 20 minutes').onRun((async (context) => {
+  const users = await db.collection("users")
+                        // .where('loggedIn', '==', true)
+                        // .where('notificationEnabled', '==', true)
+                        .get();
   if (users.empty) {
-    response.send("kms");
-    return;
+    console.log('no users');
+    return Promise.resolve();
   }
   let taCourses: ICourse[];
-  
-  users.forEach(async userDoc => {
-    if (userDoc.exists && userDoc.data().username === '335432704') {
+  console.log(users.size);
+
+  return Promise.all(users.docs.map(async userDoc => {
+    if (userDoc.exists) {
       try {
         console.log(`retrieving user ${userDoc.data().username}`)
         console.log(`retrieving from ta`);
         taCourses = await getFromTa(<IUser>userDoc.data());
 
-        await updateFirestoreData(taCourses, userDoc.data().uid);
+        return updateFirestoreData(taCourses, userDoc.data().uid);
         // console.log(JSON.stringify(taCourses, null, 2));
         
       } catch (e) {
         console.log(e);
       }
     }
-  });
-  response.send("Hello from Firebase!");
-});
+    return Promise.resolve();
+  }));
+}));
 
 
-export const sendNotification = functions.https.onRequest(async (req, res) => {
+// export const sendNotification = functions.https.onRequest(async (req, res) => {
 
-  const usersSnapshot = await db.collection('users').get();
-  const dueDate = new Date('May 4, 2020 23:59:59');
-  const now = new Date();
-  const dueIn = (dueDate.getTime() - now.getTime())/1000;
+//   const usersSnapshot = await db.collection('users').get();
+//   const dueDate = new Date('May 4, 2020 23:59:59');
+//   const now = new Date();
+//   const dueIn = (dueDate.getTime() - now.getTime())/1000;
 
-  usersSnapshot.forEach(async userSnap => {
-    try {
-      const msg = {
-        data: {
-          hi: 'sdf',
-          hello: 'hi'
-        },
-        token: userSnap.data().fcmToken,
-        notification: {
-          title: 'lickable flames',
-          body: `conics is due in ${dueIn}seconds`,
-        }
-      };
+//   usersSnapshot.forEach(async userSnap => {
+//     try {
+//       const msg = {
+//         data: {
+//           hi: 'sdf',
+//           hello: 'hi'
+//         },
+//         token: userSnap.data().fcmToken,
+//         notification: {
+//           title: 'lickable flames',
+//           body: `conics is due in ${dueIn}seconds`,
+//         }
+//       };
 
-      const msgRes = await admin.messaging().send(msg);
-      console.log(msgRes);
+//       const msgRes = await admin.messaging().send(msg);
+//       console.log(msgRes);
 
-    } catch (err) {
-      console.log(err);
-    }
+//     } catch (err) {
+//       console.log(err);
+//     }
     
-  });
-  res.send('yayyyy');
-});
+//   });
+//   res.send('yayyyy');
+// });
 
 
 export const verifyUser = functions.https.onRequest(async (req, res) => {
@@ -257,7 +261,12 @@ async function updateAssessments(
   return Promise.all(taAssessments.map(async(taAssessment: [IAssessment, number]) => {
     const assessment = taAssessment[0];
     console.log('new mark');
-    sendMarkNotif(userId, course.name, assessment);
+    try {
+      await sendMarkNotif(userId, course.name, assessment);
+    } catch (err) {
+      console.log(err);
+    }
+    
     return assessmentsRef.add({
       name: assessment.name,
       userId: userId,
@@ -288,7 +297,7 @@ function sendMarkNotif(
 
     let bodyText: string;
     let assessmentAvg = getAssessmentAvg(assessment.marks);
-    const multiplyBy = Math.pow(100, userSnapshot.docs[0].data().precision);
+    const multiplyBy = Math.pow(10, userSnapshot.docs[0].data().precision);
     assessmentAvg = Math.round(assessmentAvg*100*multiplyBy)/multiplyBy;
     if (assessmentAvg) {
       bodyText = `${assessment.name}: ${assessmentAvg}%`;

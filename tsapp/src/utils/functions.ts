@@ -22,6 +22,11 @@ export interface NotificationSettings {
   notifcationEnabled: boolean;
 };
 
+export interface DBLoggedIn {
+  uid: string;
+  loggedIn: boolean;
+};
+
 //checks if ta credentials are valid, then update to firestore
 export const updateTaCredentials = (taCredentials: TaCredentials): Promise<unknown> => {
   return new Promise(async(resolve, reject) => {
@@ -61,9 +66,13 @@ export const updateNotificationSettings = (notificationPermission: NotificationS
   return updateCredentials(notificationPermission);
 };
 
+export const setDBLoggedIn = (dbLoggedIn: DBLoggedIn) => {
+  return updateCredentials(dbLoggedIn);
+};
+
 
 //updating to cloud firestore
-const updateCredentials = (credentials: TaCredentials|FcmToken|NotificationSettings) => {
+const updateCredentials = (credentials: TaCredentials|FcmToken|NotificationSettings|DBLoggedIn) => {
   return new Promise(async (resolve, reject) => {
     try {
       const userSnapshot = await firestore().collection('users')
