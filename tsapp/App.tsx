@@ -18,23 +18,22 @@ import {
   updateNotificationSettings
 } from './src/utils/functions';
 import {WEB_CLIENT_ID} from './keys.js';
-import EmailConfirmationModal from './src/components/EmailConfirmationModal';
 
 
 const Stack = createStackNavigator();
 
 const App = () => {
   const [firebaseUserInfo, setFirebaseUserInfo] = useState<FirebaseAuthTypes.User|null>(null);
-  // const [userInfo, setUserInfo] = useState<User|null>(null);
   const [loggedIn, setLoggedIn] = useState<boolean>(false);
   const [initializing, setInitializing] = useState<boolean>(true);
-  const [emailVerified, setEmailVerified] = useState<boolean>(false);
+  const [loggedInFromTa, setLoggedInFromTa] = useState<boolean>(false);
 
   //update fcm token to the cloud
   const updateToken = async () => {
     try {
       if (firebaseUserInfo) {
         const fcmToken = await AsyncStorage.getItem('fcmToken');
+        console.log('updated token to firebase');
         if (!fcmToken) throw new Error('fcmToken missing from async storage');
         const res = await updateFcmToken({
           uid: firebaseUserInfo.uid,
@@ -48,31 +47,34 @@ const App = () => {
   };
 
   //set initial notification setting upon boot
-  const setNotificationSetting = async () => {
-    const notifEnabled: string|null = await AsyncStorage.getItem('notificationEnabled');
-    if (notifEnabled === null) {
-      AsyncStorage.setItem('notificationEnabled', 'true');
-      if (!firebaseUserInfo) throw new Error('firebase user info missing');
-      updateNotificationSettings({
-        uid: firebaseUserInfo.uid,
-        notifcationEnabled: true
-      });
-    }
-  };
+  // const setNotificationSetting = async () => {
+  //   const notifEnabled: string|null = await AsyncStorage.getItem('notificationEnabled');
+  //   if (notifEnabled === null) {
+  //     AsyncStorage.setItem('notificationEnabled', 'true');
+  //     if (!firebaseUserInfo) throw new Error('firebase user info missing');
+  //     updateNotificationSettings({
+  //       uid: firebaseUserInfo.uid,
+  //       notifcationEnabled: true
+  //     });
+  //   }
+  // };
 
-  //get token upon mounting the app
+  //get token upon mounting the app, if update the token if it doesn't exist
+  //@return true upon creating new token, false otherwise
   const getToken = async () => {
     const hasPerm: FirebaseMessagingTypes.AuthorizationStatus = await messaging().hasPermission();
     if (hasPerm) {
       console.log('get token');
-      setNotificationSetting();
+      // setNotificationSetting();
       let fcmToken: string|null = await AsyncStorage.getItem('fcmToken');
       if (!fcmToken) {
         console.log('got new token');
         fcmToken = await messaging().getToken();
         await AsyncStorage.setItem('fcmToken', fcmToken);
         await updateToken();
+        return true;
       }
+      return false;
     } else {
       throw new Error('no permission');
     }
@@ -81,63 +83,24 @@ const App = () => {
   //configuration for google sign-in
   useEffect(() => {
     GoogleSignin.configure({
-      // scopes: [
-      //   'https://www.googleapis.com/auth/cloud-platform'
-      // ],
       webClientId: WEB_CLIENT_ID,
       offlineAccess: true
     });
   }, []);
-
-  // const handleNotification = (message: FirebaseMessagingTypes.RemoteMessage) => {
-  //   if (message.data) {
-  //     notifee.displayNotification({
-  //       title: 'local',
-  //       body: 'notification',
-  //       android: {
-  //         channelId: 'this'
-  //       }
-  //     });
-  //   }
-  //   console.log(message.data);
-  // };
-
-  // useEffect(() => {
-  //   (async() => {
-  //     await notifee.deleteChannel('this');
-  //     console.log(await notifee.getChannels());
-  //   })();
-  // }, []);
 
 
   //checks if the user is signed in
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged((user: FirebaseAuthTypes.User|null) => {
       setFirebaseUserInfo(user);
-
-      //get google sign in not firebase sign in
-      // (async () => {
-      //   try {
-          // const signedIn = await GoogleSignin.isSignedIn();
-          // if (signedIn) {
-          //   const curUser = await GoogleSignin.getCurrentUser();
-          //   setUserInfo(curUser);
-          //   if (user && curUser) setLoggedIn(true);
-          // }
-      //     setInitializing(false);
-
-      //   } catch (err) {
-      //     if (err.code === statusCodes.SIGN_IN_REQUIRED) {
-      //       setLoggedIn(false);
-      //       setInitializing(false);
-      //     } else {
-      //       console.log(err);
-      //     }
-      //   }
-      // })();
       if (user) {
         setLoggedIn(true);
-        setEmailVerified(firebaseUserInfo?.emailVerified || false);
+
+        //force update the token to accomodate if there are multiple users
+        //don't worry about the readability :))
+        (async() => {if (!(await getToken())) updateToken()})();
+        
+        
       } else {
         setLoggedIn(false);
       }
@@ -158,42 +121,26 @@ const App = () => {
         updateToken();
       });
       messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-        // handleNotification(remoteMessage);
         console.log('background message: ');
         console.log(remoteMessage);
       });
       messaging().onMessage(async remoteMessage => {
-        // handleNotification(remoteMessage);
         console.log('foreground message: ');
         console.log(remoteMessage);
       });
     }
   }, [loggedIn]);
 
-  //refreshes the user
-  const refreshEmailVerification = async (
-    setIsRefreshing: React.Dispatch<React.SetStateAction<boolean>>
-  ) => {
-    setIsRefreshing(true);
-    await auth().currentUser?.reload();
-    setFirebaseUserInfo(auth().currentUser);
-    setEmailVerified(firebaseUserInfo?.emailVerified || false);
-    setIsRefreshing(false);
-  };
-
   if (initializing) {
     return <SplashScreen/>
-  }
-
-  if (loggedIn && !emailVerified) {
-    return <EmailConfirmationModal refresh={refreshEmailVerification}/>
   }
 
   const userContext: IUserContext = {
     setLoggedIn: setLoggedIn,
     uid: firebaseUserInfo?.uid,
     name: firebaseUserInfo?.displayName || undefined,
-    isLoggedIn: loggedIn,
+    loggedInFromTa: loggedInFromTa,
+    setLoggedInFromTa: setLoggedInFromTa
   };
 
   return ( //don't question the amount of wraps

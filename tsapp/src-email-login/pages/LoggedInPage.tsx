@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useContext} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Container, Content, Icon} from 'native-base';
 import {createDrawerNavigator} from '@react-navigation/drawer';
 import {NavigationContainer} from '@react-navigation/native';
@@ -8,8 +8,6 @@ import HomePage from './HomePage';
 import TaCredentialsPage from './TaCredentialsPage';
 import SideBar from '../components/SideBar';
 import Logout from '../components/Logout';
-import { UserContext } from '../utils/contexts';
-
 
 interface Props {
   navigation: any;
@@ -19,9 +17,6 @@ interface Props {
 const Drawer = createDrawerNavigator();
 
 const LoggedInPage: React.FC<Props> = ({navigation}) => {
-
-  const {loggedInFromTa} = useContext(UserContext);
-
   return (
     <Drawer.Navigator 
       initialRouteName='Home' 
@@ -31,12 +26,10 @@ const LoggedInPage: React.FC<Props> = ({navigation}) => {
         name='Home' 
         component={HomePage}
       />
-      {!loggedInFromTa ?
-        <Drawer.Screen 
+      <Drawer.Screen 
         name='UpdateTa' 
         component={TaCredentialsPage}
-      /> : null
-      }
+      />
       <Drawer.Screen
         name="Logout"
         component={Logout}

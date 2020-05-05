@@ -1,5 +1,5 @@
 import firestore from '@react-native-firebase/firestore';
-import {v5 as uuidv5} from 'uuid';
+
 
 
 export const errorCodes = {
@@ -75,8 +75,7 @@ const updateCredentials = (credentials: TaCredentials|FcmToken|NotificationSetti
       if (userSnapshot.empty) {
         const data = {
           ...credentials,
-          precision: 1, //ta avg precision
-          notifcationEnabled: true //whether notifications are enabled for the user
+          precision: 1 //ta avg precision
         };
         await firestore().collection('users').add(data);
         resolve('New user added');
@@ -93,21 +92,3 @@ const updateCredentials = (credentials: TaCredentials|FcmToken|NotificationSetti
   });
 };
 
-
-export const getUid = (studendId: string) => {
-  const NAMESPACE = '95be0b73-182b-40cf-bdca-fa5320cb64d9';
-  return uuidv5(studendId.trim(), NAMESPACE);
-};
-
-
-export const verifyTaUser = async (taCredentials: TaCredentials) => {
-  const res = await (await fetch('https://us-central1-avg-calc.cloudfunctions.net/verifyUser', {
-    method: 'POST',
-    mode: 'cors',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(taCredentials)
-  })).json();
-  return res;
-};

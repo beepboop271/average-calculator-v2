@@ -50,7 +50,7 @@ const SignupPage: React.FC<Props> = ({navigation}) => {
           = await auth().createUserWithEmailAndPassword(email.trim(), password);
       if (firebaseUserCredential.user) {
         firebaseUserCredential.user.updateProfile({
-          displayName: name
+          displayName: name.trim()
         });
         firebaseUserCredential.user.sendEmailVerification();
       }

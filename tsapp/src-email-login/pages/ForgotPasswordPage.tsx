@@ -81,7 +81,7 @@ const ForgotPasswordPage: React.FC<Props> = ({navigation}) => {
       <HeaderSignUp goBack={navigation.goBack}/>
       <Content style={styles.content}>
         <Text style={styles.heading}>Forgot Password?</Text>
-
+        <Text style={styles.subheading}>A password reset link will be sent to the email entered:</Text>
 
         <InputBox 
           value={email}
@@ -112,8 +112,14 @@ const styles = StyleSheet.create({
     fontSize: 50,
     fontFamily: 'sans-serif',
     color: colour.DARK_DARK_BLUE,
-    marginBottom: 30
+    
   },
+  subheading: {
+    fontSize: 15,
+    fontFamily: 'sans-serif',
+    color: 'gray',
+    marginBottom: 25
+  }
 });
 
 

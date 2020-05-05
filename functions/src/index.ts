@@ -32,7 +32,7 @@ export const run = functions.https.onRequest(async (request, response) => {
         taCourses = await getFromTa(<IUser>userDoc.data());
 
         await updateFirestoreData(taCourses, userDoc.data().uid);
-        // console.log(JSON.stringify(taCourses, null, 2));
+        console.log(JSON.stringify(taCourses, null, 2));
         
       } catch (e) {
         console.log(e);
@@ -75,6 +75,10 @@ export const onMarkUpdate = functions.firestore
 export const sendNotification = functions.https.onRequest(async (req, res) => {
 
   const usersSnapshot = await db.collection('users').get();
+  const dueDate = new Date('May 4, 2020 23:59:59');
+  const now = new Date();
+  const dueIn = (dueDate.getTime() - now.getTime())/1000;
+
   usersSnapshot.forEach(async userSnap => {
     try {
       const msg = {
@@ -84,8 +88,8 @@ export const sendNotification = functions.https.onRequest(async (req, res) => {
         },
         token: userSnap.data().fcmToken,
         notification: {
-          title: 'kmskmssm',
-          body: 'hello world'
+          title: 'lickable flames',
+          body: `conics is due in ${dueIn}seconds`,
         }
       };
 
@@ -98,6 +102,36 @@ export const sendNotification = functions.https.onRequest(async (req, res) => {
     
   });
   res.send('yayyyy');
+});
+
+
+export const verifyUser = functions.https.onRequest(async (req, res) => {
+  const user = req.body;
+  if (user.password === '' || user.username === '') {
+    res.json({error: 'invalid credentials'});
+  } else {
+    let taResponse: string;
+
+    try {
+      taResponse = await rp.post({
+        url: "https://ta.yrdsb.ca/yrdsb/index.php",
+        form: {
+          username: user.username,
+          password: user.password
+        },
+        followAllRedirects: true
+      });
+    } catch (err) {
+      console.log(err);
+    }
+  
+    if (/Invalid Login/.test(taResponse)) {
+      res.json({error: 'invalid credentials'});
+    } else {
+      const token = await admin.auth().createCustomToken(user.uid);
+      res.json({token: token});
+    }
+  }
 });
 
 

@@ -16,7 +16,7 @@ import { GoogleSignin } from '@react-native-community/google-signin';
 const SideBar: React.FC<DrawerContentComponentProps<DrawerContentOptions>> = (props) => {
 
   //signing out
-  const {setLoggedIn, loggedInFromTa} = useContext(UserContext);
+  const {setLoggedIn} = useContext(UserContext);
   if (!setLoggedIn) throw new Error('no provider for setLoggedIn in sidebar');
 
   const signOut = async() => {
@@ -49,15 +49,12 @@ const SideBar: React.FC<DrawerContentComponentProps<DrawerContentOptions>> = (pr
         focused={curRoute === 'Home'}
         onPress={() => props.navigation.navigate('Home')}
       />
-      {
-      !loggedInFromTa ?
       <DrawerItem
         label='TA info'
         icon={() => <Icon name='school'/>}
         focused={curRoute === 'UpdateTa'}
         onPress={() => props.navigation.navigate('UpdateTa')}
-      /> : null
-      }
+      />
       <DrawerItem
         label='Logout'
         icon={() => <Icon name='log-out'/>}
