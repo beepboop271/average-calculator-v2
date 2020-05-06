@@ -7,6 +7,9 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
+// tslint:disable-next-line:no-any
+const stringify = (x: any): string => JSON.stringify(x, undefined, 2);
+
 interface IUser {
   username: string;
   password: string;
@@ -186,9 +189,7 @@ const getWeights = (report: string): number[] | undefined => {
       .substring(weightTable[i].indexOf("%"))
       .match(/([0-9\.]+)%/);
     if (match === null) {
-      throw new Error(
-        `Found weight table but couldn't find weight percentages in:\n${weightTable[i]}`
-      );
+      throw new Error(`Found weight table but couldn't find weight percentages in:\n${weightTable[i]}`);
     }
     weights.push(Number(match[1]));
   }
@@ -206,7 +207,7 @@ const getEndTag = (
   report: string,
   beginningPattern: RegExp,
   searchPattern: RegExp,
-  startTag: string
+  startTag: string,
 ): ITagMatch | undefined => {
   let match: RegExpMatchArray | null = report.match(beginningPattern);
   // console.log(match);
@@ -246,12 +247,15 @@ const strandPatterns: Map<StrandString, RegExp> = new Map([
 ]);
 const tablePattern: RegExp = /<tr>.+<\/tr>/;
 
-const getAssessments = (uid: string, report: string): IAssessment[] | undefined  => {
+const getAssessments = (
+  uid: string,
+  report: string,
+): IAssessment[] | undefined => {
   const assessmentTableMatch: ITagMatch | undefined = getEndTag(
     report,
     /table border="1" cellpadding="3" cellspacing="0" width="100%">/,
     /(<table)|(<\/table>)/,
-    "<table"
+    "<table",
   );
   if (assessmentTableMatch === undefined) {
     return undefined;
@@ -259,7 +263,7 @@ const getAssessments = (uid: string, report: string): IAssessment[] | undefined 
 
   let assessmentTable = assessmentTableMatch.content.replace(
     /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
-    ""
+    "",
   );
 
   let tableRow: ITagMatch | undefined;
@@ -267,9 +271,7 @@ const getAssessments = (uid: string, report: string): IAssessment[] | undefined 
   while (tablePattern.test(assessmentTable)) {
     tableRow = getEndTag(assessmentTable, /<tr>/, /(<tr>)|(<\/tr>)/, "<tr>");
     if (tableRow === undefined) {
-      throw new Error(
-        `Expected to find an assessment but none was found in:\n${report}`
-      );
+      throw new Error(`Expected to find an assessment but none was found in:\n${report}`);
     }
     rows.push(tableRow.content);
     assessmentTable = tableRow.after;
@@ -330,7 +332,11 @@ const postToLogin = async (user: IUser): Promise<ILoginResult> =>
     req.on("response", (res: IResponse) => {
       let match: RegExpMatchArray | null;
       let token = "";
-      if (res.headers !== undefined && res.headers.location !== undefined && res.headers["set-cookie"] !== undefined) {
+      if (
+        res.headers !== undefined
+        && res.headers.location !== undefined
+        && res.headers["set-cookie"] !== undefined
+      ) {
         for (const cookie of res.headers["set-cookie"]) {
           match = cookie.match(/^session_token=([^;]+);/);
           if (match !== null) {
@@ -343,17 +349,21 @@ const postToLogin = async (user: IUser): Promise<ILoginResult> =>
             homepage: res.headers.location,
           });
         } else {
-          reject(new Error(`did not find the right cookies in: ${JSON.stringify(res.headers["set-cookie"], undefined, 2)}`));
+          reject(new Error(`did not find the right cookies in: ${stringify(res.headers["set-cookie"])}`));
         }
       } else {
-        reject(new Error(`found no headers or cookies when logging in: ${JSON.stringify(res, undefined, 2)}`));
+        reject(new Error(`found no headers or cookies when logging in: ${stringify(res)}`));
       }
     });
     req.write(`username=${user.username}&password=${user.password}`);
     req.end();
   });
 
-const getPage = async (hostname: string, path: string, cookie: string): Promise<string> =>
+const getPage = async (
+  hostname: string,
+  path: string,
+  cookie: string,
+): Promise<string> =>
   new Promise((resolve, reject): void => {
     let body = "";
     const req = httpsRequest(
@@ -364,11 +374,17 @@ const getPage = async (hostname: string, path: string, cookie: string): Promise<
         path,
       },
       (res) => {
-        res.on("data", (chunk) => { body += chunk; });
-        res.on("end", () => { resolve(body); });
-      }
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => {
+          resolve(body);
+        });
+      },
     );
-    req.on("error", (err) => { reject(err); });
+    req.on("error", (err) => {
+      reject(err);
+    });
     req.end();
   });
 
@@ -377,7 +393,11 @@ const periodMatcher = /Block: ([A-Z]|ASP|\d)/;
 const dateMatcher = /(\d\d\d\d-\d\d)-\d\d/;
 const roomMatcher = /rm\. (\d+|PB\d+)/;
 
-const getCourse = async (homepageRow: string, cookie: string, user: IUser): Promise<ICourse> => {
+const getCourse = async (
+  homepageRow: string,
+  cookie: string,
+  user: IUser,
+): Promise<ICourse> => {
   const id = homepageRow.match(idMatcher);
   const period = homepageRow.match(periodMatcher);
   const date = homepageRow.match(dateMatcher);
@@ -399,7 +419,7 @@ const getCourse = async (homepageRow: string, cookie: string, user: IUser): Prom
     reportPage = await getPage(
       "ta.yrdsb.ca",
       `/live/students/viewReport.php?subject_id=${id[1]}&student_id=${id[2]}`,
-      cookie
+      cookie,
     );
   } catch (e) {
     throw e;
@@ -415,7 +435,9 @@ const getCourse = async (homepageRow: string, cookie: string, user: IUser): Prom
 
   try {
     name = getName(reportPage);
-    if (name === undefined) { throw new Error(`Course name not found:\n${reportPage}`); }
+    if (name === undefined) {
+      throw new Error(`Course name not found:\n${reportPage}`);
+    }
 
     weights = getWeights(reportPage);
     if (weights === undefined) {
@@ -451,7 +473,11 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
       throw new Error(`invalid credentials: ${user.username} ${user.password}`);
     }
     res = await postToLogin(user);
-    homePage = await getPage("ta.yrdsb.ca", res.homepage.split(".ca", 2)[1], res.cookie);
+    homePage = await getPage(
+      "ta.yrdsb.ca",
+      res.homepage.split(".ca", 2)[1],
+      res.cookie,
+    );
   } catch (e) {
     throw e;
   }
@@ -461,7 +487,12 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
 
   homePage = homePage.replace(/\s+/g, " ");
 
-  let courseRows = getEndTag(homePage, /<tr bgcolor="#(?:dd|ee)ffff">/, /(<tr)|(<\/tr>)/, "<tr");
+  let courseRows = getEndTag(
+    homePage,
+    /<tr bgcolor="#(?:dd|ee)ffff">/,
+    /(<tr)|(<\/tr>)/,
+    "<tr",
+  );
   if (courseRows === undefined) {
     throw new Error(`No open reports found:\n${homePage}`);
   }
@@ -475,7 +506,12 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
       console.warn(e);
     }
 
-    courseRows = getEndTag(courseRows.after, /<tr bgcolor="#(?:dd|ee)ffff">/, /(<tr)|(<\/tr>)/, "<tr");
+    courseRows = getEndTag(
+      courseRows.after,
+      /<tr bgcolor="#(?:dd|ee)ffff">/,
+      /(<tr)|(<\/tr>)/,
+      "<tr",
+    );
   }
 
   return courses;
@@ -499,7 +535,7 @@ export const f = functions.https.onRequest(async (_request, response) => {
       //   getFromTa(doc.data() as IUser),
       //   getFromFirestore(doc.data() as IUser),
       // ]);
-      console.log(`AAAAA:\n${JSON.stringify(await getFromTa(doc.data() as IUser), undefined, 2)}`);
+      console.log(stringify(await getFromTa(doc.data() as IUser)));
 
       // console.log(`TA:\n${JSON.stringify(courses[0], undefined, 2)}`);
       // console.log("\n\n\n");
