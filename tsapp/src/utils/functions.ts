@@ -88,6 +88,7 @@ const updateCredentials = (credentials: TaCredentials|FcmToken|NotificationSetti
           notifcationEnabled: true //whether notifications are enabled for the user
         };
         await firestore().collection('users').add(data);
+        await updateUserCourseInfo(credentials.uid);
         resolve('New user added');
       }
 
@@ -119,4 +120,27 @@ export const verifyTaUser = async (taCredentials: TaCredentials) => {
     body: JSON.stringify(taCredentials)
   })).json();
   return res;
+};
+
+
+//update the course data if possible, then gets it, for offline purposes
+export const updateUserCourseInfo = (uid: string): Promise<Response> => {
+  return fetch('https://us-central1-avg-calc.cloudfunctions.net/updateUserCourseInfo', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({uid: uid})
+  });
+};
+
+
+export const getDate = (): string => {
+  const now = new Date();
+  if (now.getMonth() >= 1 && now.getMonth() < 8) {
+    // [Feb, Sep)
+    return `Feb ${now.getFullYear()}`;
+  } else {
+    return `Sep ${now.getFullYear()}`;
+  }
 };

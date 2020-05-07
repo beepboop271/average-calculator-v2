@@ -17,7 +17,7 @@ interface IUser {
   courses: string[];
 }
 
-export const run = functions.pubsub.schedule('every 20 minutes').onRun((async (context) => {
+export const run = functions.pubsub.schedule('every 10 minutes').onRun((async (context) => {
   const users = await db.collection("users")
                         // .where('loggedIn', '==', true)
                         // .where('notificationEnabled', '==', true)
@@ -111,6 +111,68 @@ export const verifyUser = functions.https.onRequest(async (req, res) => {
 });
 
 
+//update the user's course info
+//requested upon loading the page
+export const updateUserCourseInfo = functions.https.onRequest(async(req, res) => {
+  const now = getDate();
+  try {
+    const userSnap = await db.collection('users')
+                             .where('uid', '==', req.body.uid)
+                             .get();
+
+    if (userSnap.size > 1) throw new Error('more than one user found');
+    if (userSnap.empty) throw new Error('user not found');
+
+    const user = userSnap.docs[0].data();
+    // const usersSnap = await db.collection('users').get();
+    // usersSnap.forEach(async userSnap => {
+
+      // const user = userSnap.data();
+
+    const userCourseInfo = await getUserCourseInfo(user.username, user.password);
+
+    const coursesRef = db.collection('users')
+                        .doc(userSnap.docs[0].id)
+                        // .doc(userSnap.id)
+                        .collection('courses');
+
+    const courses = await coursesRef.where('date', '==', now).get();
+
+    courses.docs.forEach(courseSnap => {
+      const course = courseSnap.data();
+      delete course.date;
+      delete course.average;
+
+      const taCourseIdx = userCourseInfo.findIndex(taCourse => {
+        return _.isEqual(taCourse, course);
+      })
+      //user no longer registered in this course
+      //dropped out or smth
+      if (taCourseIdx === -1) {
+        coursesRef.doc(courseSnap.id).delete().catch(console.log);
+      } else {
+        userCourseInfo.splice(taCourseIdx, 1);
+      }
+    });
+
+    if (userCourseInfo.length > 0) {
+      await Promise.all(userCourseInfo.map(async taCourse => {
+        return coursesRef.add({
+          ...taCourse, 
+          date: now
+        });
+      }));
+    }
+//////
+  // });
+  ///
+
+  } catch (err) {
+    console.log(err);
+  }
+  res.end();
+});
+
 interface IAuthMap {
   username: string;
   password: string;
@@ -134,6 +196,7 @@ interface IAssessment {
 
 interface ICourse {
   name: string;
+  courseCode: string;
   period: string;
   room: string;
   date: string;
@@ -154,20 +217,20 @@ function getDate(): string {
 
 
 async function updateFirestoreData(taCourses: ICourse[], userId: string) {
-  return Promise.all(taCourses.map(async (course: ICourse) => {
+  const asyncFunctions = taCourses.map((course: ICourse) => async() => {
     const coursesRef = db.collection('courses');
     const date = getDate();
     
     try {
       let docId: string;
       const courseSnapshot = await coursesRef
-            .where('name', '==', course.name)
+            .where('courseCode', '==', course.courseCode)
             .where('date', '==', date)
             .get();
       //if this course does not exist, first time set up add weightings
       if (courseSnapshot.empty) {
         docId = (await coursesRef.add({
-          name: course.name,
+          courseCode: course.courseCode,
           date: date,
           students: [],
           assessmentNames: [],
@@ -192,20 +255,76 @@ async function updateFirestoreData(taCourses: ICourse[], userId: string) {
           throw err;
         });
       }
-
-      return Promise.all([
+      //add/update assessment names
+      const assessmentNames = course.assessments.map(assessment => assessment.name);
+      
+      const promiseResults = await Promise.all([
+        courseRef.update({assessmentNames: assessmentNames}),
         updateAssessments(course, courseRef, userId)
       ]);
+      
+      //if there is a change in the student's assessments
+      if (promiseResults[1]) {
+        return updateCourseAverage(course, userId);
+      }
+
+      return Promise.resolve();
     } catch (e) {
       //I'll do something about this later
-      throw e;
+      console.log(e);
     }
-    
-  }));
+  });
+
+  return asyncFunctions.reduce(async(prevPromise, nextFunction) => {
+    await prevPromise;
+    await nextFunction();
+  }, Promise.resolve());
 }
 
 
-//update/create the assessment to the database
+async function updateCourseAverage(
+  course: ICourse, 
+  userId: string
+) {
+  const avg: number|null = getCourseAvg(course.weights, course.assessments);
+
+  const userSnap = await db.collection('users')
+                           .where('uid', '==', userId)
+                           .get();
+
+  if (userSnap.size > 1) {
+    throw new Error('more than one user found');
+  } else if (userSnap.empty) {
+    throw new Error('no users found');
+  }
+
+  const courseRef = db.collection('users')
+                      .doc(userSnap.docs[0].id)
+                      .collection('courses');
+
+  const courseSnap = await courseRef
+                          .where('courseCode', '==', course.courseCode)
+                          .where('date', '==', getDate())
+                          .get();
+
+  if (courseSnap.empty) {
+    throw new Error('course not found');
+  } else if (courseSnap.size > 1) {
+    throw new Error('multiple courses found');
+  }
+
+  return courseRef.doc(courseSnap.docs[0].id)
+                  .update({average: avg});
+};
+
+
+/**
+ * update/create assessments
+ * @param course 
+ * @param courseRef 
+ * @param userId 
+ * @return whether anything is updated
+ */
 async function updateAssessments(
   course: ICourse, 
   courseRef: FirebaseFirestore.DocumentReference<FirebaseFirestore.DocumentData>, 
@@ -221,6 +340,8 @@ async function updateAssessments(
   const taAssessments: [IAssessment, number][] = course.assessments.map((assessment, index) => {
     return [assessment, index];
   });
+
+  let updated: boolean = false;
   
   //udpate order of assessments and delete assessments
   await Promise.all(assessmentsSnapShot.docs.map(async (assessmentDoc) => {
@@ -244,6 +365,7 @@ async function updateAssessments(
     //if assessment exists in db but not ta
     if (assessmentIdx === -1) {
       console.log('deleted assessment');
+      updated = true;
       return assessmentsRef.doc(assessmentDoc.id).delete();
     }
 
@@ -257,12 +379,14 @@ async function updateAssessments(
     return Promise.resolve();
   }));
 
+  ///////////////////////
   // add the new documents/updating marks/weights
-  return Promise.all(taAssessments.map(async(taAssessment: [IAssessment, number]) => {
+  await Promise.all(taAssessments.map(async(taAssessment: [IAssessment, number]) => {
     const assessment = taAssessment[0];
     console.log('new mark');
+    updated = true;
     try {
-      await sendMarkNotif(userId, course.name, assessment);
+      await sendMarkNotif(userId, course.courseCode, assessment);
     } catch (err) {
       console.log(err);
     }
@@ -271,17 +395,20 @@ async function updateAssessments(
       name: assessment.name,
       userId: userId,
       courseRef: courseRef,
-      courseName: course.name,
+      courseName: course.courseCode,
       order: taAssessment[1],
       ...assessment.marks
     });
   }));
+
+  ////
+  return Promise.resolve(updated);
 }
 
 
 function sendMarkNotif(
   userId: string, 
-  courseName: string,
+  courseCode: string,
   assessment: IAssessment
 ) {
   return new Promise(async(resolve, reject) => {
@@ -308,11 +435,51 @@ function sendMarkNotif(
     resolve(admin.messaging().send({
       token: userSnapshot.docs[0].data().fcmToken,
       notification: {
-        title: courseName,
+        title: courseCode,
         body: bodyText
       }
     }));
+    // resolve(bodyText);
   });
+}
+
+//gets the course avg in decimal form
+function getCourseAvg(weights, assessments: IAssessment[]): number|null {
+  //in case the teacher didn't post any weights
+  if (!weights) return null;
+
+
+  // [sum, total weights]
+  const marks = {
+    k: [0, 0],
+    t: [0, 0],
+    c: [0, 0],
+    a: [0, 0],
+    f: [0, 0]
+  };
+
+  assessments.forEach((assessment: IAssessment) => {
+    Object.keys(assessment.marks).forEach((strand: string) => {
+      if (assessment.marks[strand]) {
+        const mark = assessment.marks;
+        marks[strand][0] += mark[strand].numerator
+                    /mark[strand].denominator*mark[strand].weight;
+        marks[strand][1] += mark[strand].weight;
+      }
+    });
+  });
+
+  let sum: number = 0;
+  let totalWeight: number = 0;
+  Object.keys(marks).forEach((strand: string) => {
+    if (marks[strand][1] > 0) {
+      sum += marks[strand][0]/marks[strand][1]*weights[strand];
+      totalWeight += weights[strand];
+    }
+  });
+
+  if (totalWeight === 0) return null;
+  return sum/totalWeight;
 }
 
 
@@ -329,6 +496,48 @@ function getAssessmentAvg(marks: {[strand: string]: IMark}) {
     return null;
   }
   return sum/totalWeight;
+}
+
+
+async function getUserCourseInfo(username: string, password: string) {
+  let homePage: string;
+  const session: CookieJar = rp.jar();
+
+  try {
+    homePage = await rp.post({
+      url: "https://ta.yrdsb.ca/yrdsb/index.php",
+      form: {
+        username: username,
+        password: password
+      },
+      jar: session,
+      followAllRedirects: true
+    });
+  } catch (e) {
+    throw e;
+  }
+
+  //getting the course name, date, period
+  const nameMatcher: RegExp = /<tr bgcolor="#(eeffff|ddffff)">\s+<td>\s+.+<br>\s+.+/g;
+
+  const infoMatched: RegExpMatchArray = homePage.match(nameMatcher);
+
+  const coursesInfo: ICourse[] = [];
+
+  infoMatched.forEach(info => {
+    const course = {
+      courseCode: '',
+      name: '',
+      period: '',
+      room: ''
+    };
+    course.courseCode = info.match(/.{6}-.{2}/g)[0];
+    course.name = info.match(/: .*\t/g)[0].slice(1).trim();
+    course.period = info.match(/Block: \S*/g)[0].slice(7);
+    course.room = info.match(/rm. \S*/g)[0].slice(4);
+    coursesInfo.push(<ICourse>course);
+  });
+  return coursesInfo;
 }
 
 
@@ -356,6 +565,7 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
   }
 
   console.log(`homepage retrieved in ${Date.now()-startTime} ms`);
+  
 
   const idMatcher: RegExp = /<a href="viewReport.php\?subject_id=([0-9]+)&student_id=([0-9]+)">/g;
 
@@ -368,9 +578,10 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
   const courses: ICourse[] = [];
 
   let report: string;
-  let name: string|null;
+  let courseCode: string|null;
   let weights: {[strand: string]: number}|null;
   let assessments: IAssessment[]|null;
+
 
   while (courseIDs) {
     console.log(`getting ${courseIDs[1]}...`);
@@ -393,9 +604,9 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
 
     report = report.replace(/\s+/g, " ");
     try {
-      name = getName(report);
-      if (name === null)
-        throw new Error(`Course name not found:\n${report}`);
+      courseCode = getCourseCode(report);
+      if (courseCode === null)
+        throw new Error(`Course code not found:\n${report}`);
       
       weights = getWeights(report);
       if (weights === null)
@@ -404,7 +615,7 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
       assessments = getAssessments(report);
       if (assessments === null)
         console.warn(`Course assessments not found:\n${report}\n`);
-      courses.push(<ICourse>{name, weights, assessments});
+      courses.push(<ICourse>{courseCode, weights, assessments});
     } catch (e) {
       // even if one course fails, we want to
       // continue grabbing the other courses
@@ -413,9 +624,12 @@ async function getFromTa(auth: IAuthMap): Promise<ICourse[]> {
     courseIDs = idMatcher.exec(homePage);
   }
   return courses;
+  
 }
 
-function getName(report: string): string|null {
+
+
+function getCourseCode(report: string): string|null {
   const match: RegExpExecArray|null = /<h2>(\S+?)<\/h2>/.exec(report);
   if (match) {
     return match[1];
