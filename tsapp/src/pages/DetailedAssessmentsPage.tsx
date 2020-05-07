@@ -9,9 +9,10 @@ interface Props {
 };
 
 const DetailedAssessmentsPage: React.FC<Props> = ({navigation, route}) => {
-  if (!route.params?.course) {
+  if (!route.params?.courseCode) {
     throw new Error('course info not passed for assessments page');
   }
+  console.log(route.params.courseCode);
 
   return (
     <Container>

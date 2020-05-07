@@ -1,5 +1,5 @@
 import React, { useEffect, useContext, useState } from 'react';
-import {View, StyleSheet} from 'react-native';
+import {View, StyleSheet, RefreshControl} from 'react-native';
 import {Container, Content, Text} from 'native-base';
 import firestore from '@react-native-firebase/firestore';
 
@@ -7,6 +7,8 @@ import {UserContext} from '../utils/contexts';
 import {getDate, updateUserCourseInfo} from '../utils/functions';
 import Course from '../components/Course';
 import SplashScreen from '../components/SplashScreen';
+import HeaderNav from '../components/HeaderNav';
+import {colour, adobeAnalogousBlue, adobeMonochromaticBlue} from '../utils/colours';
 
 interface Props {
   navigation: any;
@@ -14,7 +16,6 @@ interface Props {
 
 interface CourseInfo {
   name: string;
-  period: string;
   courseCode: string;
   room: string;
   average: number;
@@ -28,6 +29,7 @@ const CoursesOverviewPage: React.FC<Props> = ({navigation}) => {
   if (!uid) return <SplashScreen/>;
 
   const [courses, setCourses] = useState<CourseInfo[]|null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
 
   const getCourseInfo = async() => {
@@ -57,48 +59,16 @@ const CoursesOverviewPage: React.FC<Props> = ({navigation}) => {
     }
   };
 
-  // const getAverage = async() => {
-  //   if (courses) {
-  //     await Promise.all(courses.map(async(course, index) => {
+  const refresh = async() => {
+    setRefreshing(true);
+    await updateUserCourseInfo(uid);
+    await getCourseInfo();
+    setRefreshing(false);
+  };
 
-  //       const courseSnap = await firestore().collection('courses')
-  //                             .where('courseCode', '==', course.courseCode)
-  //                             .where('date', '==', now)
-  //                             .get();
-  //       if (courseSnap.size > 1) {
-  //         throw new Error('duplicate courses');
-  //       } else if (courseSnap.empty) {
-  //         console.log(`cannot find course ${course.courseCode}`);
-  //         return Promise.resolve();
-  //       }
-
-  //       const avgSnap = await firestore().collection('courses')
-  //                         .doc(courseSnap.docs[0].id)
-  //                         .collection('averages')
-  //                         .where('userId', '==', uid)
-  //                         .get();
-
-  //       if (avgSnap.empty || avgSnap.size > 1) {
-  //         throw new Error("can't find average snap");
-  //       }
-
-  //       const userSnap = await firestore().collection('users')
-  //                               .where('uid', '==', uid)
-  //                               .get();
-        
-  //       const precision = userSnap.docs[0].data().precision;
-  //       const multiplyBy = Math.pow(10, precision); 
-  //       const avg = avgSnap.docs[0].data().average;
-  //       setCourses(courses => {
-  //         if (courses) {
-  //           courses[index].average = Math.round(avg*100*multiplyBy)/multiplyBy;
-  //         }
-  //         return courses;
-  //       });
-  //     }));
-  //     console.log('retrieving avg finished');
-  //   }
-  // };
+  const navigate = (courseCode: string) => {
+    navigation.navigate('Detailed', {courseCode: courseCode});
+  };
 
   useEffect(() => {
     updateUserCourseInfo(uid);
@@ -107,7 +77,6 @@ const CoursesOverviewPage: React.FC<Props> = ({navigation}) => {
 
   if (!courses) {
     console.log('no courses');
-    // return <Text>lsdfjslkfj</Text>
     return <SplashScreen/>
   }
 
@@ -118,7 +87,7 @@ const CoursesOverviewPage: React.FC<Props> = ({navigation}) => {
       <Course
         name={course.name}
         courseCode={course.courseCode}
-        period={course.period}
+        navigate={navigate}
         room={course.room}
         average={course.average}
       />
@@ -126,11 +95,32 @@ const CoursesOverviewPage: React.FC<Props> = ({navigation}) => {
   };
 
   return (
-    <Content>
-      {getCoursesCards()}
-    </Content>
+    <Container>
+      <HeaderNav heading='Home' toggleDrawer={navigation.toggleDrawer}/>
+      <Content style={styles.content} refreshControl={
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={refresh} 
+          colors={[adobeAnalogousBlue.BLUE_VIOLET]}/>
+      }>
+        <View style={styles.dropShadow}></View>
+        {getCoursesCards()}
+      </Content>
+    </Container>
+    
   );
 };
 
+const styles = StyleSheet.create({
+  content: {
+    backgroundColor: colour.LIGHT_LIGHT_GRAY,
+  },
+  dropShadow: {
+    elevation: 5,
+    backgroundColor: colour.LIGHT_GRAY,
+    height: 1,
+    marginBottom: 20
+  }
+});
 
 export default CoursesOverviewPage;

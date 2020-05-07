@@ -3,7 +3,8 @@ export const colour = {
   LIGHT_GRAY: '#f0f0f0',
   DARK_BLUE: '#196494',
   MAGENTA: '#9714a8',
-  DARK_DARK_BLUE: '#171140'
+  DARK_DARK_BLUE: '#171140',
+  LIGHT_LIGHT_GRAY: '#fafafa'
 };
 
 export const adobeAnalogousBlue = {
