@@ -4,14 +4,15 @@ import Modal from 'react-native-modal';
 import {Spinner, Text} from 'native-base';
 
 
-import {UserContext} from '../utils/contexts';
+import {UserContext, ThemeContext} from '../utils/contexts';
 
 
 const Logout: React.FC = () => {
   const {isLoggedIn} = useContext(UserContext);
+  const {colour} = useContext(ThemeContext);
 
   return (
-    <View>
+    <View style={{backgroundColor: colour.background}}>
       <Modal 
         isVisible={isLoggedIn} 
         animationIn='zoomInDown' 

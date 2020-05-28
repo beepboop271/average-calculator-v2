@@ -1,10 +1,9 @@
-import React, {useState} from 'react';
-import {View} from 'react-native';
+import React, {useContext} from 'react';
 import {Item, Input, Icon, InputGroup} from 'native-base';
 import {StyleSheet} from 'react-native';
 
 
-import colours from '../utils/colours';
+import {ThemeContext} from '../utils/contexts';
 
 interface Props {
   icon: string;
@@ -37,6 +36,22 @@ const InputBox: React.FC<Props> = ({
   disabled
 }) => {
 
+  const {colour} = useContext(ThemeContext);
+  const styles = StyleSheet.create({
+    item: {
+      margin: '3%'
+    },
+    icon: {
+      color: colour.settings.text,
+      width: 30,
+      textAlign: 'center',
+    },
+    text: {
+      fontFamily: 'sans-serif',
+      color: colour.header.text
+    }
+  });
+
   const xIconPressed = () => {
     setValue('');
     setIsInvalid(false);
@@ -55,7 +70,7 @@ const InputBox: React.FC<Props> = ({
           onSubmitEditing={() => setValue('')}
           placeholderTextColor='#a9a9a9'
           secureTextEntry={secureTextEntry}
-          style={{fontFamily: 'sans-serif-light'}}
+          style={styles.text}
           disabled={disabled}
         />
         {isInvalid && value !== '' && xIcon
@@ -69,15 +84,6 @@ const InputBox: React.FC<Props> = ({
 };
 
 
-const styles = StyleSheet.create({
-  item: {
-    margin: '3%'
-  },
-  icon: {
-    color: colours.DARK_GRAY,
-    width: 30,
-    textAlign: 'center'
-  }
-});
+
 
 export default InputBox;

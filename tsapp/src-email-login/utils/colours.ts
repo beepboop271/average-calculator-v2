@@ -3,7 +3,9 @@ export const colour = {
   LIGHT_GRAY: '#f0f0f0',
   DARK_BLUE: '#196494',
   MAGENTA: '#9714a8',
-  DARK_DARK_BLUE: '#171140'
+  DARK_DARK_BLUE: '#171140',
+  LIGHT_LIGHT_GRAY: '#fafafa',
+  BLUE: '#2848bd'
 };
 
 export const adobeAnalogousBlue = {
@@ -29,5 +31,6 @@ export const adobeMonochromaticBlue = {
   GRAY: '#5D5880',
   GRAY_BLUE: '#6050CC'
 };
+
 
 export default colour;
