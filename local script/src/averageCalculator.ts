@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import * as crypto from "crypto";
 import { request as httpsRequest } from "https";
+import NestedError from "nested-error-stacks";
 
 // tslint:disable:no-any no-unsafe-any
 const stringify = (x: any): string => JSON.stringify(x, undefined, 2);
@@ -381,7 +382,10 @@ const getCourse = async (
       cookie,
     );
   } catch (e) {
-    throw e;
+    if (e instanceof Error) {
+      throw new NestedError(`Failed to load report for course ${id[1]}`, e);
+    }
+    throw new Error(`Failed to load report for course ${id[1]}: ${e}`);
   }
 
   log(chalk`got report {blueBright ${id[1]}} in {blueBright ${Date.now() - startTime} ms}`);
@@ -437,7 +441,10 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
       res.cookie,
     );
   } catch (e) {
-    throw e;
+    if (e instanceof Error) {
+      throw new NestedError(`Failed to load homepage for user ${user.username}`, e);
+    }
+    throw new Error(`Failed to load homepage for user ${user.username}: ${e}`);
   }
   log(chalk`homepage retrieved in {blueBright ${Date.now() - startTime} ms}`);
   log("logged in");
