@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { request as httpsRequest } from "https";
@@ -7,7 +8,7 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-// tslint:disable-next-line:no-any
+// tslint:disable-next-line:no-any no-unsafe-any
 const stringify = (x: any): string => JSON.stringify(x, undefined, 2);
 
 interface IUser {
@@ -21,19 +22,15 @@ interface IUser {
 type StrandString = "k" | "t" | "c" | "a" | "f";
 
 interface IMark {
+  strand: StrandString;
+  uid: string;
+  taId: string;
+  name: string;
+  hash: string;
+
   weight: number;
   numerator: number;
   denominator: number;
-}
-
-interface IAssessment {
-  name: string;
-  uid: string;
-  k: IMark | undefined;
-  t: IMark | undefined;
-  c: IMark | undefined;
-  a: IMark | undefined;
-  f: IMark | undefined;
 }
 
 interface ICourse {
@@ -41,9 +38,10 @@ interface ICourse {
   period: string;
   room: string;
   date: string;
+  hash: string;
 
   weights: number[] | undefined;
-  assessments: IAssessment[] | undefined;
+  assessments: IMark[] | undefined;
 }
 
 interface IResponse {
@@ -64,121 +62,19 @@ interface ITagMatch {
   content: string;
 }
 
-// const getDate = (): string => {
-//   const now = new Date();
-
-//   return now.getMonth() >= 1 && now.getMonth() < 8
-//     ? `${now.getFullYear()}-02`
-//     : `${now.getFullYear()}-09`;
-// };
-
-// const getFromFirestore = async (user: IUser): Promise<ICourse[]> => {
-//   const coursesRef = db.collection("courses");
-//   const date: string = getDate();
-
-//   let snapshot: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
-
-//   const courseDocs = await Promise.all(
-//     user.courses.map(async (courseName: string) => {
-//       try {
-//         snapshot = await coursesRef
-//           .where("name", "==", courseName)
-//           .where("date", "==", date)
-//           .get();
-//       } catch (e) {
-//         console.error(
-//           `Failed to retrieve course {name: ${courseName}, date: ${date}}:\n${e}`
-//         );
-
-//         return undefined;
-//       }
-
-//       if (snapshot.empty) {
-//         console.error(
-//           `Found no such course {name: ${courseName}, date: ${date}}`
-//         );
-
-//         return undefined;
-//       }
-//       if (snapshot.size > 1) {
-//         console.error(
-//           `Found more than one course {name: ${courseName}, date: ${date}}`
-//         );
-
-//         return undefined;
-//       }
-
-//       return snapshot.docs[0];
-//     })
-//   );
-
-//   const courses: ICourse[] = [];
-//   let maybeCourse: FirebaseFirestore.DocumentData;
-//   let course: ICourse;
-
-//   for (const courseDoc of courseDocs) {
-//     if (courseDoc !== undefined) {
-//       maybeCourse = courseDoc.data();
-
-//       if (
-//         maybeCourse.period === undefined ||
-//         maybeCourse.room === undefined ||
-//         maybeCourse.date === undefined ||
-//         maybeCourse.name === undefined
-//       ) {
-//         // shouldn't even be possible to miss date or name but whatever
-//         console.warn(
-//           `Course missing info fields (expected name, period, room, date):\n${JSON.stringify(
-//             maybeCourse
-//           )}`
-//         );
-//       }
-
-//       if (maybeCourse.weights === undefined) {
-//         console.error(`Course missing weights:\n${JSON.stringify(maybeCourse)}`);
-//       }
-
-//       course = maybeCourse as ICourse;
-
-//       snapshot = await courseDoc.ref
-//         .collection("assessments")
-//         .where("uid", "==", user.uid)
-//         .orderBy("name", "asc")
-//         .get();
-
-//       if (snapshot.empty) {
-//         console.log(`No assessments found:\n${JSON.stringify(course)}`);
-//         course.assessments = [];
-//       } else {
-//         // snapshot.docs.forEach(doc => {console.log(doc.data())});
-//         course.assessments = [];
-//         for (const doc of snapshot.docs) {
-//           // console.log(`pushed ${course.name} ${doc.data()}`);
-//           course.assessments.push(doc.data() as IAssessment);
-//         }
-//         // console.log(course.assessments);
-//       }
-
-//       courses.push(course);
-//     }
-//   }
-
-//   return courses;
-// };
-
 const getName = (report: string): string | undefined => {
-  const match: RegExpExecArray | null = /<h2>(\S+?)<\/h2>/.exec(report);
+  const match = report.match(/<h2>(\S+?)<\/h2>/);
 
   return match !== null ? match[1] : undefined;
 };
 
 const getWeights = (report: string): number[] | undefined => {
-  const idx: number = report.indexOf("#ffffaa");
+  const idx = report.indexOf("#ffffaa");
   if (idx === -1) {
     return undefined;
   }
 
-  const weightTable: string[] = report.slice(idx, idx + 800).split("#");
+  const weightTable = report.slice(idx, idx + 800).split("#");
   weightTable.shift();
 
   const weights: number[] = [];
@@ -209,15 +105,14 @@ const getEndTag = (
   searchPattern: RegExp,
   startTag: string,
 ): ITagMatch | undefined => {
-  let match: RegExpMatchArray | null = report.match(beginningPattern);
-  // console.log(match);
+  let match = report.match(beginningPattern);
   if (match === null || match.index === undefined) {
     return undefined;
   }
-  const idx: number = match.index;
+  const idx = match.index;
 
   let tagsToClose = 1;
-  const searcher: RegExp = new RegExp(searchPattern, "g");
+  const searcher = new RegExp(searchPattern, "g");
 
   while (tagsToClose > 0) {
     match = searcher.exec(report.substring(idx + 1));
@@ -237,21 +132,110 @@ const getEndTag = (
   };
 };
 
-const namePattern: RegExp = /<td rowspan="2">(.+?)<\/td>/;
-const strandPatterns: Map<StrandString, RegExp> = new Map([
-  ["k", /<td bgcolor="ffffaa" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-  ["t", /<td bgcolor="c0fea4" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-  ["c", /<td bgcolor="afafff" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-  ["a", /<td bgcolor="ffd490" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-  ["f", /<td bgcolor="#?dedede" align="center" id="\S+?">([0-9\.]+) \/ ([0-9\.]+).+?<br> <font size="-2">weight=([0-9\.]+)<\/font> <\/td>/],
-]);
-const tablePattern: RegExp = /<tr>.+<\/tr>/;
+const getElementList = (
+  report: string,
+  beginningPattern: RegExp,
+  searchPattern: RegExp,
+  startTag: string,
+  moreElementsTestPattern: RegExp,
+): string[] => {
+  const elements: string[] = [];
+  let tagMatch: ITagMatch | undefined;
+  let leftover = report;
+  while (moreElementsTestPattern.test(leftover)) {
+    tagMatch = getEndTag(leftover, beginningPattern, searchPattern, startTag);
+    if (tagMatch === undefined) {
+      throw new Error(`Expected to find more elements with ${moreElementsTestPattern.toString()} but none was found in:\n${report}`);
+    }
+    elements.push(tagMatch.content);
+    leftover = tagMatch.after;
+  }
 
-const getAssessments = (
+  return elements;
+};
+
+const getCombinedHash = (str1: string, str2: string): string =>
+  crypto
+    .createHash("sha256")
+    .update(str1 + str2)
+    .digest("base64")
+    .replace(/=*$/, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+
+const namePattern = /<td rowspan="2">(.+?)<\/td>/;
+const colourPattern = /<td bgcolor="([#0-9a-f]+)"/;
+const markPattern = /align="center" id="e,(?<id>\d+)">(?:no mark|(?<numerator>\d+(?:\.\d+)?)? \/ (?<denominator>\d+(?:\.\d+)?)[^<]+<br> <font size="-2">weight=(?<weight>\d+(?:\.\d+)?)<\/font>)/;
+const strandsFromColour: Map<string, StrandString> = new Map([
+  ["ffffaa", "k"],
+  ["c0fea4", "t"],
+  ["afafff", "c"],
+  ["ffd490", "a"],
+  ["#dedede", "f"],
+]);
+const tableRowPattern = /<tr>.+<\/tr>/;
+const tableDataPattern = /<td.+<\/td>/;
+
+const getMarksFromRow = (
+  uid: string,
+  tableRow: string,
+): IMark[] => {
+  const parts = getElementList(
+    tableRow,
+    /<td/,
+    /(<td)|(<\/td>)/,
+    "<td",
+    tableDataPattern,
+  );
+
+  if (parts.length === 0) {
+    throw new Error(`Found no data in row:\n${tableRow}`);
+  }
+  const nameMatch = parts.shift()?.match(namePattern);
+  if (nameMatch === null || nameMatch === undefined) {
+    throw new Error(`Could not find assessment name in row:\n${tableRow}`);
+  }
+  const rowName = nameMatch[1].trim();
+
+  const marks: IMark[] = [];
+
+  let colourMatch: RegExpMatchArray | null;
+  let strand: StrandString | undefined;
+  let markMatch: RegExpMatchArray | null;
+  for (const part of parts) {
+    colourMatch = part.match(colourPattern);
+    if (colourMatch === null) {
+      throw new Error(`Found no strand colour in part:\n${part}\nin row:\n${tableRow}`);
+    }
+    strand = strandsFromColour.get(colourMatch[1]);
+    if (strand === undefined) {
+      throw new Error(`Found no matching strand for colour ${colourMatch[1]} in row:\n${tableRow}`);
+    }
+
+    markMatch = part.match(markPattern);
+    if (markMatch !== null && markMatch.groups !== undefined) {
+      marks.push({
+        strand,
+        uid,
+        taId: markMatch.groups.id,
+        name: rowName,
+        hash: getCombinedHash(uid, markMatch.groups.id),
+
+        weight: Number(markMatch.groups.weight),
+        numerator: Number(markMatch.groups.numerator),
+        denominator: Number(markMatch.groups.denominator),
+      });
+    }
+  }
+
+  return marks;
+};
+
+const getMarksFromReport = (
   uid: string,
   report: string,
-): IAssessment[] | undefined => {
-  const assessmentTableMatch: ITagMatch | undefined = getEndTag(
+): IMark[] | undefined => {
+  const assessmentTableMatch = getEndTag(
     report,
     /table border="1" cellpadding="3" cellspacing="0" width="100%">/,
     /(<table)|(<\/table>)/,
@@ -261,58 +245,25 @@ const getAssessments = (
     return undefined;
   }
 
-  let assessmentTable = assessmentTableMatch.content.replace(
-    /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
-    "",
+  const rows = getElementList(
+    assessmentTableMatch.content.replace(
+      /<tr> <td colspan="[0-5]" bgcolor="white"> [^&]*&nbsp; <\/td> <\/tr>/g,
+      "",
+    ),
+    /<tr>/,
+    /(<tr>)|(<\/tr>)/,
+    "<tr>",
+    tableRowPattern,
   );
-
-  let tableRow: ITagMatch | undefined;
-  const rows: string[] = [];
-  while (tablePattern.test(assessmentTable)) {
-    tableRow = getEndTag(assessmentTable, /<tr>/, /(<tr>)|(<\/tr>)/, "<tr>");
-    if (tableRow === undefined) {
-      throw new Error(`Expected to find an assessment but none was found in:\n${report}`);
-    }
-    rows.push(tableRow.content);
-    assessmentTable = tableRow.after;
-  }
   rows.shift();
 
-  const assessments: IAssessment[] = [];
-  let match: RegExpExecArray | null;
-  let assessment: IAssessment;
-  let mark: IMark;
+  const marks: IMark[] = [];
 
   for (const row of rows) {
-    match = namePattern.exec(row);
-    if (match === null) {
-      throw new Error(`Could not find assessment name in row:\n${row}`);
-    }
-    assessment = {
-      name: match[1].trim(),
-      uid,
-      k: undefined,
-      t: undefined,
-      c: undefined,
-      a: undefined,
-      f: undefined,
-    };
-
-    for (const [strand, pattern] of strandPatterns) {
-      match = pattern.exec(row);
-      if (match !== null) {
-        mark = {
-          weight: Number(match[3]),
-          numerator: Number(match[1]),
-          denominator: Number(match[2]),
-        };
-        assessment[strand] = mark;
-      }
-    }
-    assessments.push(assessment);
+    marks.push(...getMarksFromRow(uid, row));
   }
 
-  return assessments;
+  return marks;
 };
 
 const loginOptions = {
@@ -331,7 +282,6 @@ const postToLogin = async (user: IUser): Promise<ILoginResult> =>
     req.on("error", (err) => { reject(err); });
     req.on("response", (res: IResponse) => {
       let match: RegExpMatchArray | null;
-      let token = "";
       if (
         res.headers !== undefined
         && res.headers.location !== undefined
@@ -339,18 +289,14 @@ const postToLogin = async (user: IUser): Promise<ILoginResult> =>
       ) {
         for (const cookie of res.headers["set-cookie"]) {
           match = cookie.match(/^session_token=([^;]+);/);
-          if (match !== null) {
-            token = `session_token=${match[1]}`;
+          if (match !== null && match[1] !== "deleted") {
+            resolve({
+              cookie: `session_token=${match[1]}`,
+              homepage: res.headers.location,
+            });
           }
         }
-        if (token !== "") {
-          resolve({
-            cookie: token,
-            homepage: res.headers.location,
-          });
-        } else {
-          reject(new Error(`did not find the right cookies in: ${stringify(res.headers["set-cookie"])}`));
-        }
+        reject(new Error(`did not find the right cookies in: ${stringify(res.headers["set-cookie"])}`));
       } else {
         reject(new Error(`found no headers or cookies when logging in: ${stringify(res)}`));
       }
@@ -378,7 +324,8 @@ const getPage = async (
           body += chunk;
         });
         res.on("end", () => {
-          resolve(body);
+          // replace all whitespace with a single space
+          resolve(body.replace(/ {2,}|[\r\n\t\f\v]+/g, " "));
         });
       },
     );
@@ -405,7 +352,6 @@ const getCourse = async (
   if (date === null) {
     throw new Error(`empty homepage row: ${homepageRow}`);
   }
-
   if (id === null) {
     throw new Error(`course closed: ${homepageRow}`);
   }
@@ -425,13 +371,11 @@ const getCourse = async (
     throw e;
   }
 
-  console.log(`got report in ${Date.now() - startTime} ms`);
-
-  reportPage = reportPage.replace(/\s+/g, " ");
+  console.log(`got report ${id[1]} in ${Date.now() - startTime} ms`);
 
   let name: string | undefined;
   let weights: number[] | undefined;
-  let assessments: IAssessment[] | undefined;
+  let assessments: IMark[] | undefined;
 
   try {
     name = getName(reportPage);
@@ -444,14 +388,15 @@ const getCourse = async (
       console.warn(`Course weights not found:\n${reportPage}`);
     }
 
-    assessments = getAssessments(user.uid, reportPage);
+    assessments = getMarksFromReport(user.uid, reportPage);
     if (assessments === undefined) {
-      console.warn(`Course assessments not found:\n${reportPage}\n`);
+      console.warn(`Course assessments not found:\n${reportPage}`);
     }
 
     return {
       assessments,
       date: date[1],
+      hash: getCombinedHash(name, date[1]),
       name,
       period: period[1],
       room: room[1],
@@ -482,10 +427,7 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
     throw e;
   }
   console.log(`homepage retrieved in ${Date.now() - startTime} ms`);
-
   console.log("logged in");
-
-  homePage = homePage.replace(/\s+/g, " ");
 
   let courseRows = getEndTag(
     homePage,
@@ -517,6 +459,14 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
   return courses;
 };
 
+// const writeToDb = async (courses: ICourse[]): Promise<void> => {
+//   for (const course of courses) {
+
+//   }
+
+//   return;
+// };
+
 export const f = functions.https.onRequest(async (_request, response) => {
   const users = await db.collection("users").get();
   if (users.empty) {
@@ -524,24 +474,19 @@ export const f = functions.https.onRequest(async (_request, response) => {
 
     return;
   }
-  // let taCourses: ICourse[];
-  // let dbCourses: ICourse[];
-  // let courses: [ICourse[], ICourse[]];
+
+  let courses: ICourse[];
+
   users.forEach(async (doc) => {
     if (doc.exists) {
       console.log(`retrieving user ${doc.data().username}`);
-
-      // courses = await Promise.all([
-      //   getFromTa(doc.data() as IUser),
-      //   getFromFirestore(doc.data() as IUser),
-      // ]);
-      console.log(stringify(await getFromTa(doc.data() as IUser)));
-
-      // console.log(`TA:\n${JSON.stringify(courses[0], undefined, 2)}`);
-      // console.log("\n\n\n");
-      // console.log(`DB:\n${JSON.stringify(courses[1], undefined, 2)}`);
-
-      // compareAndWriteCourses(doc.data() as IUser, courses[0], courses[1]);
+      // synchronously because we need to be nice to teachassist
+      courses = await getFromTa(doc.data() as IUser);
+      console.log(stringify(courses));
+      // writeToDb(courses)
+      //   .then(() => { log(`successfully wrote courses from ${doc.data().username}`); })
+      //   .catch(error);
+      await new Promise((resolve): void => { setTimeout(resolve, 1000); });
     }
   });
 
