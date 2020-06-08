@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { request as httpsRequest } from "https";
+import NestedError from "nested-error-stacks";
 
 admin.initializeApp({
   credential: admin.credential.cert("firebase-key.json"),
@@ -368,7 +369,10 @@ const getCourse = async (
       cookie,
     );
   } catch (e) {
-    throw e;
+    if (e instanceof Error) {
+      throw new NestedError(`Failed to load report for course ${id[1]}`, e);
+    }
+    throw new Error(`Failed to load report for course ${id[1]}: ${e}`);
   }
 
   console.log(`got report ${id[1]} in ${Date.now() - startTime} ms`);
@@ -424,7 +428,10 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
       res.cookie,
     );
   } catch (e) {
-    throw e;
+    if (e instanceof Error) {
+      throw new NestedError(`Failed to load homepage for user ${user.username}`, e);
+    }
+    throw new Error(`Failed to load homepage for user ${user.username}: ${e}`);
   }
   console.log(`homepage retrieved in ${Date.now() - startTime} ms`);
   console.log("logged in");
@@ -468,27 +475,42 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
 // };
 
 export const f = functions.https.onRequest(async (_request, response) => {
-  const users = await db.collection("users").get();
-  if (users.empty) {
-    response.send("kms");
+  try {
+    const users = await db.collection("users").get();
 
-    return;
-  }
+    if (users.empty) {
+      response.send("kms");
 
-  let courses: ICourse[];
-
-  users.forEach(async (doc) => {
-    if (doc.exists) {
-      console.log(`retrieving user ${doc.data().username}`);
-      // synchronously because we need to be nice to teachassist
-      courses = await getFromTa(doc.data() as IUser);
-      console.log(stringify(courses));
-      // writeToDb(courses)
-      //   .then(() => { log(`successfully wrote courses from ${doc.data().username}`); })
-      //   .catch(error);
-      await new Promise((resolve): void => { setTimeout(resolve, 1000); });
+      return;
     }
-  });
 
-  response.send("Hello from Firebase!");
+    let courses: ICourse[];
+
+    users.forEach(async (doc) => {
+      if (doc.exists) {
+        console.log(`retrieving user ${doc.data().username}`);
+        // synchronously because we need to be nice to teachassist
+        try {
+          courses = await getFromTa(doc.data() as IUser); 
+        } catch (e) {
+          if (e instanceof Error) {
+            throw new NestedError("Failed to retrieve data from teachassist", e);
+          }
+          throw new Error(`Failed to retrieve data from teachassist: ${e}`);
+        }
+        console.log(stringify(courses));
+        // writeToDb(courses)
+        //   .then(() => { log(`successfully wrote courses from ${doc.data().username}`); })
+        //   .catch(error);
+        await new Promise((resolve): void => { setTimeout(resolve, 1000); });
+      }
+    });
+
+    response.send("Hello from Firebase!");
+  } catch (e) {
+    if (e instanceof Error) {
+      throw new NestedError("Failed to retrieve users", e);
+    }
+    throw new Error(`Failed to retrieve users: ${e}`);
+  }
 });
