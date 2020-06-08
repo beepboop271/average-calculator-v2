@@ -4,17 +4,17 @@
   "description": "its average calculator but in typescript, to be developed into more useful stuff",
   "main": "aaaaaaaa.ts",
   "dependencies": {
-    "dotenv-safe": "^8.2.0",
-    "request": "^2.88.2",
-    "request-promise-native": "^1.0.8"
+    "chalk": "^4.0.0",
+    "dotenv-safe": "^8.2.0"
   },
   "devDependencies": {
     "@types/node": "^13.7.0",
-    "@types/request-promise-native": "^1.0.17"
+    "tslint": "^5.12.0",
+    "typescript": "^3.9.5"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "tsc -p . && node dist/aaaaaaaa.js"
+    "start": "tsc && node -r dotenv-safe/config dist/averageCalculator.js"
   },
   "author": "Kevin Qiao",
   "license": "MIT"
