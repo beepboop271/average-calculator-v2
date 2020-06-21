@@ -20,6 +20,10 @@ interface IUser {
   courses: string[];
 }
 
+interface ICourseStudent {
+  markHashes: string[];
+}
+
 type StrandString = "k" | "t" | "c" | "a" | "f";
 
 interface IMark {
@@ -155,10 +159,10 @@ const getElementList = (
   return elements;
 };
 
-const getCombinedHash = (str1: string, str2: string): string =>
+const getCombinedHash = (...strings: string[]): string =>
   crypto
     .createHash("sha256")
-    .update(str1 + str2)
+    .update(strings.reduce((acc, cur): string => acc + cur, ""))
     .digest("base64")
     .replace(/=*$/, "")
     .replace(/\+/g, "-")
@@ -220,7 +224,13 @@ const getMarksFromRow = (
         uid,
         taId: markMatch.groups.id,
         name: rowName,
-        hash: getCombinedHash(uid, markMatch.groups.id),
+        hash: getCombinedHash(
+          uid,
+          markMatch.groups.id,
+          markMatch.groups.weight,
+          markMatch.groups.numerator,
+          markMatch.groups.denominator,
+        ),
 
         weight: Number(markMatch.groups.weight),
         numerator: Number(markMatch.groups.numerator),
@@ -466,13 +476,79 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
   return courses;
 };
 
-// const writeToDb = async (courses: ICourse[]): Promise<void> => {
-//   for (const course of courses) {
+type PendingWrites = Array<Promise<FirebaseFirestore.WriteResult>>;
 
-//   }
+const setDifference = <T>(a: Set<T>, b: Set<T>): Set<T> => {
+  const difference = new Set(a);
+  for (const val of b) {
+    difference.delete(val);
+  }
 
-//   return;
-// };
+  return difference;
+}
+
+const writeToDb = (
+  user: IUser,
+  courses: ICourse[],
+): PendingWrites => {
+  const pendingWrites: PendingWrites = [];
+
+  courses.forEach(async (course): Promise<void> => {
+    const writeOps: PendingWrites = [];
+
+    const assessmentsRef = db.collection("courses")
+      .doc(course.hash)
+      .collection("assessments");
+    const studentDataRef = db.collection("courses")
+      .doc(course.hash)
+      .collection("students")
+      .doc(user.uid);
+
+    const studentData = await studentDataRef.get();
+
+    if (studentData.exists) {
+      const dbHashSet = new Set((studentData.data() as ICourseStudent).markHashes);
+      const freshHashes: string[] = course.assessments === undefined
+        ? []
+        : course.assessments.map((mark): string => mark.hash);
+
+      const freshHashSet = new Set(course.assessments?.map((mark): string => mark.hash));
+
+      const markHashesToRemove = setDifference(dbHashSet, freshHashSet);
+      const markHashesToAdd = setDifference(freshHashSet, dbHashSet);
+      const marksToAdd: IMark[] = course.assessments === undefined
+        ? []
+        : course.assessments.filter((mark): boolean => markHashesToAdd.has(mark.hash));
+
+      if (markHashesToRemove.size + marksToAdd.length > 0) {
+        for (const markToRemove of markHashesToRemove) {
+          writeOps.push(assessmentsRef.doc(markToRemove).delete());
+        }
+
+        for (const markToAdd of marksToAdd) {
+          writeOps.push(assessmentsRef.doc(markToAdd.hash).set(markToAdd));
+        }
+
+        writeOps.push(studentDataRef.set({
+          markHashes: freshHashes,
+        }));
+      }
+    } else {
+      const writtenHashes: string[] = [];
+      course.assessments?.forEach((mark): void => {
+        writtenHashes.push(mark.hash);
+        writeOps.push(assessmentsRef.doc(mark.hash).set(mark));
+      });
+      writeOps.push(studentDataRef.set({
+        markHashes: writtenHashes,
+      }));
+    }
+
+    pendingWrites.concat(writeOps);
+  });
+
+  return pendingWrites;
+};
 
 export const f = functions.https.onRequest(async (_request, response) => {
   try {
@@ -491,17 +567,17 @@ export const f = functions.https.onRequest(async (_request, response) => {
         console.log(`retrieving user ${doc.data().username}`);
         // synchronously because we need to be nice to teachassist
         try {
-          courses = await getFromTa(doc.data() as IUser); 
+          courses = await getFromTa(doc.data() as IUser);
         } catch (e) {
           if (e instanceof Error) {
             throw new NestedError("Failed to retrieve data from teachassist", e);
           }
           throw new Error(`Failed to retrieve data from teachassist: ${e}`);
         }
-        console.log(stringify(courses));
-        // writeToDb(courses)
-        //   .then(() => { log(`successfully wrote courses from ${doc.data().username}`); })
-        //   .catch(error);
+        // console.log(stringify(courses));
+        Promise.all(writeToDb(doc.data() as IUser, courses))
+          .then(() => { console.log(`successfully wrote courses from ${doc.data().username}`); })
+          .catch(console.error);
         await new Promise((resolve): void => { setTimeout(resolve, 1000); });
       }
     });
