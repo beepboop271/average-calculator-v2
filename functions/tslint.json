@@ -18,11 +18,13 @@
 
     // always active
     "increment-decrement": false,
+    "linebreak-style": false,  // git takes care of  this
     "max-classes-per-file": false,
     "member-ordering": [true, { "order": "fields-first" }],
     "newline-per-chained-call": false,
     "no-bitwise": false,
     "object-literal-sort-keys": [true, "match-declaration-order"],
+    "switch-default": false,
     "trailing-comma": [
       true,
       {
