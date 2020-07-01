@@ -40,8 +40,6 @@ interface IMark {
 
 interface ICourse {
   name: string;
-  period: string;
-  room: string;
   date: string;
   hash: string;
 
@@ -170,7 +168,7 @@ const getCombinedHash = (...strings: string[]): string =>
 
 const namePattern = /<td rowspan="2">(.+?)<\/td>/;
 const colourPattern = /<td bgcolor="([#0-9a-f]+)"/;
-const markPattern = /align="center" id="e,(?<id>\d+)">(?:no mark|(?<numerator>\d+(?:\.\d+)?)? \/ (?<denominator>\d+(?:\.\d+)?)[^<]+<br> <font size="-2">weight=(?<weight>\d+(?:\.\d+)?)<\/font>)/;
+const markPattern = /align="center" id="e,(?<id>\d+)">(?:no mark|(?<numerator>\d+(?:\.\d+)?)? \/ (?<denominator>\d+(?:\.\d+)?)[^<]+<br> <font size="-2">(?:no weight|weight=(?<weight>\d+(?:\.\d+)?))<\/font>)/;
 const strandsFromColour: Map<string, StrandString> = new Map([
   ["ffffaa", "k"],
   ["c0fea4", "t"],
@@ -180,6 +178,20 @@ const strandsFromColour: Map<string, StrandString> = new Map([
 ]);
 const tableRowPattern = /<tr>.+<\/tr>/;
 const tableDataPattern = /<td.+<\/td>/;
+
+const matchAll = (str: string, pattern: RegExp): RegExpExecArray[] => {
+  const matcher = new RegExp(pattern, "g");
+  const matches: RegExpExecArray[] = [];
+  let lastMatch: RegExpExecArray | null;
+
+  lastMatch = matcher.exec(str);
+  while (lastMatch !== null) {
+    matches.push(lastMatch);
+    lastMatch = matcher.exec(str);
+  }
+
+  return matches;
+};
 
 const getMarksFromRow = (
   uid: string,
@@ -206,7 +218,7 @@ const getMarksFromRow = (
 
   let colourMatch: RegExpMatchArray | null;
   let strand: StrandString | undefined;
-  let markMatch: RegExpMatchArray | null;
+  let markMatches: RegExpExecArray[];
   for (const part of parts) {
     colourMatch = part.match(colourPattern);
     if (colourMatch === null) {
@@ -217,25 +229,30 @@ const getMarksFromRow = (
       throw new Error(`Found no matching strand for colour ${colourMatch[1]} in row:\n${tableRow}`);
     }
 
-    markMatch = part.match(markPattern);
-    if (markMatch !== null && markMatch.groups !== undefined) {
-      marks.push({
-        strand,
-        uid,
-        taId: markMatch.groups.id,
-        name: rowName,
-        hash: getCombinedHash(
+    markMatches = matchAll(part, markPattern);
+    for (const markMatch of markMatches) {
+      if (markMatch.groups !== undefined) {
+        marks.push({
+          strand,
           uid,
-          markMatch.groups.id,
-          markMatch.groups.weight,
-          markMatch.groups.numerator,
-          markMatch.groups.denominator,
-        ),
+          taId: markMatch.groups.id,
+          name: rowName,
+          hash: getCombinedHash(
+            uid,
+            markMatch.groups.id,
+            rowName,
+            markMatch.groups.weight,
+            markMatch.groups.numerator,
+            markMatch.groups.denominator,
+          ),
 
-        weight: Number(markMatch.groups.weight),
-        numerator: Number(markMatch.groups.numerator),
-        denominator: Number(markMatch.groups.denominator),
-      });
+          // tslint:disable:strict-boolean-expressions
+          weight: Number(markMatch.groups.weight) || 0,
+          numerator: Number(markMatch.groups.numerator) || 0,
+          denominator: Number(markMatch.groups.denominator) || 0,
+          // tslint:enable
+        });
+      }
     }
   }
 
@@ -347,45 +364,31 @@ const getPage = async (
   });
 
 const idMatcher = /<a href="viewReport.php\?subject_id=([0-9]+)&student_id=([0-9]+)">/;
-const periodMatcher = /Block: ([A-Z]|ASP|\d)/;
 const dateMatcher = /(\d\d\d\d-\d\d)-\d\d/;
-const roomMatcher = /rm\. (\d+|PB\d+)/;
 
 const getCourse = async (
-  homepageRow: string,
+  courseId: string,
+  studentId: string,
+  date: string,
   cookie: string,
   user: IUser,
 ): Promise<ICourse> => {
-  const id = homepageRow.match(idMatcher);
-  const period = homepageRow.match(periodMatcher);
-  const date = homepageRow.match(dateMatcher);
-  const room = homepageRow.match(roomMatcher);
-  if (date === null) {
-    throw new Error(`empty homepage row: ${homepageRow}`);
-  }
-  if (id === null) {
-    throw new Error(`course closed: ${homepageRow}`);
-  }
-  if (period === null || room === null) {
-    throw new Error(`no period/room found in homepage row: ${homepageRow}`);
-  }
-
   const startTime = Date.now();
   let reportPage: string;
   try {
     reportPage = await getPage(
       "ta.yrdsb.ca",
-      `/live/students/viewReport.php?subject_id=${id[1]}&student_id=${id[2]}`,
+      `/live/students/viewReport.php?subject_id=${courseId}&student_id=${studentId}`,
       cookie,
     );
   } catch (e) {
     if (e instanceof Error) {
-      throw new NestedError(`Failed to load report for course ${id[1]}`, e);
+      throw new NestedError(`Failed to load report for course ${courseId}`, e);
     }
-    throw new Error(`Failed to load report for course ${id[1]}: ${e}`);
+    throw new Error(`Failed to load report for course ${courseId}: ${e}`);
   }
 
-  console.log(`got report ${id[1]} in ${Date.now() - startTime} ms`);
+  console.log(`got report ${courseId} in ${Date.now() - startTime} ms`);
 
   let name: string | undefined;
   let weights: number[] | undefined;
@@ -409,11 +412,9 @@ const getCourse = async (
 
     return {
       assessments,
-      date: date[1],
-      hash: getCombinedHash(name, date[1]),
+      date,
+      hash: getCombinedHash(name, date),
       name,
-      period: period[1],
-      room: room[1],
       weights,
     };
   } catch (e) {
@@ -460,7 +461,15 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
 
   while (courseRows !== undefined) {
     try {
-      courses.push(await getCourse(courseRows.content, res.cookie, user));
+      const id = courseRows.content.match(idMatcher);
+      const date = courseRows.content.match(dateMatcher);
+      if (date === null) {
+        console.warn(`empty homepage row: ${courseRows.content}`);
+      } else if (id === null) {
+        console.warn(`course closed: ${courseRows.content}`);
+      } else {
+        courses.push(await getCourse(id[1], id[2], date[1], res.cookie, user));
+      }
     } catch (e) {
       console.warn(e);
     }
@@ -476,8 +485,6 @@ const getFromTa = async (user: IUser): Promise<ICourse[]> => {
   return courses;
 };
 
-type PendingWrites = Array<Promise<FirebaseFirestore.WriteResult>>;
-
 const setDifference = <T>(a: Set<T>, b: Set<T>): Set<T> => {
   const difference = new Set(a);
   for (const val of b) {
@@ -485,24 +492,95 @@ const setDifference = <T>(a: Set<T>, b: Set<T>): Set<T> => {
   }
 
   return difference;
-}
+};
+
+type WriteResult = FirebaseFirestore.WriteResult;
+type DocumentReference = FirebaseFirestore.DocumentReference;
+
+const maybeUpdateCourse = async (
+  courseRef: DocumentReference,
+  course: ICourse,
+): Promise<WriteResult | undefined> => {
+  const courseDoc = await courseRef.get();
+  if (courseDoc.exists) {
+    const dbCourse = courseDoc.data() as ICourse;
+    if (dbCourse.weights === undefined) {
+      if (course.weights === undefined) {
+        return undefined;
+      }
+
+      return courseRef.set({
+        date: course.date,
+        hash: course.hash,
+        name: course.name,
+        weights: course.weights,
+      });
+    }
+
+    if (course.weights === undefined) {
+      return undefined;
+    }
+
+    if (dbCourse.weights.length !== course.weights.length) {
+      return courseRef.set({
+        date: course.date,
+        hash: course.hash,
+        name: course.name,
+        weights: course.weights,
+      });
+    }
+
+    for (let i = 0; i < course.weights.length; ++i) {
+      if (dbCourse.weights[i] !== course.weights[i]) {
+        return courseRef.set({
+          date: course.date,
+          hash: course.hash,
+          name: course.name,
+          weights: course.weights,
+        });
+      }
+    }
+
+    return undefined;
+  }
+
+  if (course.weights === undefined) {
+    return courseRef.set({
+      date: course.date,
+      hash: course.hash,
+      name: course.name,
+    });
+  }
+
+  return courseRef.set({
+    date: course.date,
+    hash: course.hash,
+    name: course.name,
+    weights: course.weights,
+  });
+};
 
 const writeToDb = (
   user: IUser,
   courses: ICourse[],
-): PendingWrites => {
-  const pendingWrites: PendingWrites = [];
+): Array<Promise<WriteResult>> => {
+  const pendingWrites: Array<Promise<WriteResult>> = [];
 
   courses.forEach(async (course): Promise<void> => {
-    const writeOps: PendingWrites = [];
+    const writeOps: Array<Promise<WriteResult>> = [];
 
-    const assessmentsRef = db.collection("courses")
-      .doc(course.hash)
-      .collection("assessments");
-    const studentDataRef = db.collection("courses")
-      .doc(course.hash)
-      .collection("students")
-      .doc(user.uid);
+    const courseRef = db.collection("courses").doc(course.hash);
+
+    maybeUpdateCourse(courseRef, course)
+      .then((maybeWrite): void => {
+        if (maybeWrite !== undefined) {
+          console.log(`wrote updates to course doc: ${stringify(course)}`);
+        }
+      })
+      .catch(console.error);
+
+    const assessmentsRef = courseRef.collection("assessments");
+    const studentDataRef = courseRef.collection("students").doc(user.uid);
 
     const studentData = await studentDataRef.get();
 
@@ -555,17 +633,17 @@ export const f = functions.https.onRequest(async (_request, response) => {
     const users = await db.collection("users").get();
 
     if (users.empty) {
-      response.send("kms");
+      response.send("no users");
 
-      return;
+      throw new Error("no users found");
     }
 
     let courses: ICourse[];
 
-    users.forEach(async (doc) => {
+    return Promise.all(users.docs.map(async (doc): Promise<WriteResult[]> => {
       if (doc.exists) {
         console.log(`retrieving user ${doc.data().username}`);
-        // synchronously because we need to be nice to teachassist
+
         try {
           courses = await getFromTa(doc.data() as IUser);
         } catch (e) {
@@ -574,16 +652,15 @@ export const f = functions.https.onRequest(async (_request, response) => {
           }
           throw new Error(`Failed to retrieve data from teachassist: ${e}`);
         }
-        // console.log(stringify(courses));
-        Promise.all(writeToDb(doc.data() as IUser, courses))
-          .then(() => { console.log(`successfully wrote courses from ${doc.data().username}`); })
-          .catch(console.error);
-        await new Promise((resolve): void => { setTimeout(resolve, 1000); });
-      }
-    });
 
-    response.send("Hello from Firebase!");
+        return Promise.all(writeToDb(doc.data() as IUser, courses));
+      }
+
+      throw new Error(`User document does not exist: ${doc.ref.path}`);
+    }));
   } catch (e) {
+    response.send("bad things happened");
+
     if (e instanceof Error) {
       throw new NestedError("Failed to retrieve users", e);
     }
