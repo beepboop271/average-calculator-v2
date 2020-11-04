@@ -308,7 +308,7 @@ interface IHomepageCourseInfo {
   courseId: string;
   studentId: string;
   date: string;
-};
+}
 
 export const parseHomePage = (homePage: string): IHomepageCourseInfo[] => {
   let courseRows = getEndTag(
