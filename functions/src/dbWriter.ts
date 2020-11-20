@@ -144,7 +144,7 @@ const writeDifference = (
       writes.push(assessments.doc(hash).set(mark));
     }
 
-    writes.push(student.set({ markHashes: [...marksToAdd.keys()] }));
+    writes.push(student.set({ markHashes: [...taMap.keys()] }));
   }
 
   return writes;
