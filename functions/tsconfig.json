@@ -8,7 +8,7 @@
     "outDir": "lib",
     "removeComments": true,
     "sourceMap": true,
-    "target": "es2017",
+    "target": "es2019",
 
     "esModuleInterop": true,
 
@@ -22,7 +22,7 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Basic Options */
-    // "lib": [],                             /* Specify library files to be included in the compilation. */
+    "lib": ["es2019"],
     // "allowJs": true,                       /* Allow javascript files to be compiled. */
     // "checkJs": true,                       /* Report errors in .js files. */
     // "jsx": "preserve",                     /* Specify JSX code generation: 'preserve', 'react-native', or 'react'. */
