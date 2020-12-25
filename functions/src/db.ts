@@ -5,7 +5,7 @@ import { ICourse, IMark } from "./taParser";
 admin.initializeApp({
   credential: admin.credential.cert("firebase-key.json"),
 });
-export const db = admin.firestore();
+const db = admin.firestore();
 
 export interface IUser {
   username: string;
@@ -15,17 +15,42 @@ export interface IUser {
   courses: string[];
 }
 
-interface ICourseStudent {
+export interface ICourseStudent {
   markHashes: string[];
 }
 
-type Document = FirebaseFirestore.DocumentReference;
+type DocumentRef = FirebaseFirestore.DocumentReference;
 type Collection = FirebaseFirestore.CollectionReference;
 
 type WriteResult = FirebaseFirestore.WriteResult;
-type PendingWrite = Promise<WriteResult>;
 export type MaybeWrite = WriteResult | undefined;
-type MaybePendingWrite = Promise<MaybeWrite>;
+
+export const checkEvent = async (eventId: string): Promise<WriteResult> => {
+  const matchingEvent = await db
+    .collection("events")
+    .where("id", "==", eventId)
+    .limit(1)
+    .get();
+
+  if (!matchingEvent.empty) {
+    throw new Error("pubsub event already processed!");
+  }
+
+  return db
+    .collection("events")
+    .doc()
+    .set({ id: eventId });
+};
+
+export const getUsers = async (): Promise<FirebaseFirestore.QuerySnapshot> => {
+  const users = await db.collection("users").get();
+
+  if (users.empty) {
+    throw new Error("no users found");
+  }
+
+  return users;
+};
 
 const setDifference = <K>(a: Set<K>, b: Set<K> | Map<K, unknown>): Set<K> => {
   const difference = new Set(a);
@@ -46,20 +71,20 @@ const mapDifference = <K, V>(a: Map<K, V>, b: Set<K> | Map<K, V>): Map<K, V> => 
 };
 
 const updateCourse = (
-  courseRef: Document,
+  courseRef: DocumentRef,
   course: ICourse,
-): PendingWrite =>
+): Promise<WriteResult> =>
   courseRef.set({
     date: course.date,
     hash: course.hash,
     name: course.name,
-    weights: course.weights,
+    weights: course.weights ?? [],
   });
 
 const maybeUpdateCourse = async (
-  courseRef: Document,
+  courseRef: DocumentRef,
   course: ICourse,
-): MaybePendingWrite => {
+): Promise<MaybeWrite> => {
   const courseDoc = await courseRef.get();
   if (courseDoc.exists) {
     // name+date define a course, so if those change we'll
@@ -102,10 +127,10 @@ const maybeUpdateCourse = async (
 
 const writeAll = (
   assessments: Collection,
-  student: Document,
+  student: DocumentRef,
   course: ICourse,
-): PendingWrite[] => {
-  const writes: PendingWrite[] = [];
+): Array<Promise<WriteResult>> => {
+  const writes: Array<Promise<WriteResult>> = [];
   const hashes: string[] = [];
   // if there are no assessments just write an empty array
   course.assessments?.forEach((mark): void => {
@@ -119,16 +144,16 @@ const writeAll = (
 
 const writeDifference = (
   assessments: Collection,
-  student: Document,
+  student: DocumentRef,
   dbHashes: Set<string>,
   courseAssessments: IMark[],
-): PendingWrite[] => {
-  const writes: PendingWrite[] = [];
+): Array<Promise<WriteResult>> => {
+  const writes: Array<Promise<WriteResult>> = [];
 
   const taMap: Map<string, IMark> = new Map();
-  courseAssessments.forEach((mark): void => {
+  for (const mark of courseAssessments) {
     taMap.set(mark.hash, mark);
-  });
+  }
 
   // note: assessments that have updated marks are not considered updated
   // assessments but rather completely new ones
@@ -150,13 +175,13 @@ const writeDifference = (
   return writes;
 };
 
-export const writeToDb = (
+export const writeToDb = async (
   user: IUser,
   courses: ICourse[],
-): MaybePendingWrite[] => {
-  const writes: MaybePendingWrite[] = [];
+): Promise<Array<Promise<MaybeWrite>>> => {
+  const writes: Array<Promise<MaybeWrite>> = [];
 
-  courses.forEach(async (course): Promise<void> => {
+  await Promise.all(courses.map(async (course): Promise<void> => {
     const courseRef = db.collection("courses").doc(course.hash);
 
     writes.push(maybeUpdateCourse(courseRef, course));
@@ -194,7 +219,7 @@ export const writeToDb = (
 
     // case: db is not empty (has data/empty array) and ta gave some data
     writes.concat(writeDifference(assessments, student, dbHashes, course.assessments));
-  });
+  }));
 
   return writes;
 };
