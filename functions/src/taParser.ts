@@ -1,8 +1,7 @@
-import * as crypto from "crypto";
+import { createHash } from "crypto";
 
 const getCombinedHash = (...strings: string[]): string =>
-  crypto
-    .createHash("sha256")
+  createHash("sha256")
     .update(strings.reduce((acc, cur): string => acc + cur, ""))
     .digest("base64")
     .replace(/=*$/, "")
@@ -216,11 +215,9 @@ const getMarksFromRow = (
             markMatch.groups.denominator,
           ),
 
-          // tslint:disable:strict-boolean-expressions
-          weight: Number(markMatch.groups.weight) || 0,
-          numerator: Number(markMatch.groups.numerator) || 0,
-          denominator: Number(markMatch.groups.denominator) || 0,
-          // tslint:enable
+          weight: Number(markMatch.groups.weight) ?? 0,
+          numerator: Number(markMatch.groups.numerator) ?? 0,
+          denominator: Number(markMatch.groups.denominator) ?? 0,
         });
       }
     }
