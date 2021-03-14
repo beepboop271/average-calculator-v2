@@ -1,20 +1,47 @@
 import { pubsub } from "firebase-functions";
 import NestedError from "nested-error-stacks";
 
-import { checkEvent, getUsers, IUser, MaybeWrite, writeToDb } from "./db";
+import { compareCourse, compareCourseStudent } from "./compare";
+import {
+  checkEvent,
+  getCourses,
+  getStudentDocs,
+  getUsers,
+  handleCourseChange,
+  handleStudentChange,
+  IUser,
+  WritePromise,
+} from "./db";
 import { getFromTa } from "./taFetcher";
 
 const processUser = async (
   doc: FirebaseFirestore.QueryDocumentSnapshot,
-): Promise<Array<Promise<MaybeWrite>>> => {
+): Promise<WritePromise[]> => {
   const user: IUser = doc.data() as IUser;
   if (doc.exists) {
     console.log(`retrieving user ${user.username}`);
 
     try {
-      const courses = await getFromTa(user);
+      const taCourses = await getFromTa(user);
+      const dbCourses = await getCourses(
+        taCourses.map((course): string => course.hash),
+      );
+      const dbStudentDocs = await getStudentDocs(user, dbCourses);
 
-      return await writeToDb(user, courses);
+      const ops: Array<WritePromise | WritePromise[]> = [];
+
+      for (let i = 0; i < taCourses.length; ++i) {
+        const courseChange = compareCourse(taCourses[i], dbCourses[i]);
+        if (courseChange !== undefined) {
+          ops.push(handleCourseChange(courseChange));
+        }
+        const studentChange = compareCourseStudent(taCourses[i], dbCourses[i], dbStudentDocs[i]);
+        if (studentChange !== undefined) {
+          ops.push(handleStudentChange(studentChange));
+        }
+      }
+
+      return ops.flat();
     } catch (e) {
       if (e instanceof Error) {
         throw new NestedError("Failed to retrieve data from teachassist", e);
@@ -55,7 +82,5 @@ export const fun = pubsub
       throw new Error(`Failed to retrieve users: ${e}`);
     }
 
-    const pendingOps = (await Promise.all(users.docs.map(processUser))).flat();
-
-    return Promise.all(pendingOps).catch(console.error);
+    return Promise.all(users.docs.flatMap(processUser)).catch(console.error);
   });
