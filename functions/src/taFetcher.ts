@@ -35,8 +35,8 @@ const loginOptions = {
 const postToLogin = async (user: IUser): Promise<ILoginResult> =>
   new Promise((resolve, reject): void => {
     const req = httpsRequest(loginOptions);
-    req.on("error", (err) => { reject(err); });
-    req.on("response", (res: IResponse) => {
+    req.on("error", (err): void => { reject(err); });
+    req.on("response", (res: IResponse): void => {
       let match: RegExpMatchArray | null;
       if (
         res.headers !== undefined
@@ -79,17 +79,17 @@ const getPage = async (
         method: "GET",
         path,
       },
-      (res) => {
-        res.on("data", (chunk) => {
+      (res): void => {
+        res.on("data", (chunk): void => {
           body += chunk;
         });
-        res.on("end", () => {
+        res.on("end", (): void => {
           // replace all whitespace with a single space
           resolve(body.replace(/ {2,}|[\r\n\t\f\v]+/g, " "));
         });
       },
     );
-    req.on("error", (err) => {
+    req.on("error", (err): void => {
       reject(err);
     });
     req.end();
