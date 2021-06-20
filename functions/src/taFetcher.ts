@@ -1,15 +1,15 @@
 import { request as httpsRequest } from "https";
 import NestedError from "nested-error-stacks";
 
-import { getCourse, ICourse, parseHomePage } from "./taParser";
+import { Course, getCourse, parseHomePage } from "./taParser";
 
-interface IUser {
+interface TaUser {
   username: string;
   password: string;
   uid: string;
 }
 
-interface IResponse {
+interface Response {
   headers?: {
     "set-cookie"?: string[];
     location?: string;
@@ -17,7 +17,7 @@ interface IResponse {
   rawHeaders?: string[];
 }
 
-interface ILoginResult {
+interface LoginResult {
   cookie: string;
   homepage: string;
 }
@@ -32,11 +32,11 @@ const loginOptions = {
   path: "/live/index.php",
 };
 
-const postToLogin = async (user: IUser): Promise<ILoginResult> =>
+const postToLogin = async (user: TaUser): Promise<LoginResult> =>
   new Promise((resolve, reject): void => {
     const req = httpsRequest(loginOptions);
     req.on("error", (err): void => { reject(err); });
-    req.on("response", (res: IResponse): void => {
+    req.on("response", (res: Response): void => {
       let match: RegExpMatchArray | null;
       if (
         res.headers !== undefined
@@ -119,12 +119,12 @@ const getCoursePage = async (
   return reportPage;
 };
 
-export const getFromTa = async (user: IUser): Promise<ICourse[]> => {
+export const getFromTa = async (user: TaUser): Promise<Course[]> => {
   console.log(`logging in as ${user.username}...`);
 
   const startTime = Date.now();
   let homePage: string;
-  let res: ILoginResult;
+  let res: LoginResult;
   try {
     if (user.username.length + user.password.length !== 17) {
       throw new Error(`invalid credentials: ${user.username} ${user.password}`);
@@ -145,7 +145,7 @@ export const getFromTa = async (user: IUser): Promise<ICourse[]> => {
   console.log("logged in");
 
   const courses = parseHomePage(homePage);
-  const parsedCourses: ICourse[] = [];
+  const parsedCourses: Course[] = [];
 
   for (const course of courses) {
     parsedCourses.push(getCourse(

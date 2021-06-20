@@ -12,7 +12,7 @@ const getCombinedHash = (...strings: string[]): string =>
 
 type StrandString = "k" | "t" | "c" | "a" | "f";
 
-export interface IMark {
+export interface Mark {
   strand: StrandString;
   uid: string;
   taId: string;
@@ -24,23 +24,23 @@ export interface IMark {
   denominator: number;
 }
 
-export interface ICourse {
+export interface Course {
   name: string;
   date: string;
   hash: string;
 
   weights: number[] | undefined;
-  assessments: IMark[] | undefined;
+  assessments: Mark[] | undefined;
 }
 
-export interface ICourseAverage {
+export interface CourseAverage {
   strands: Array<number | undefined>;
   average?: number;
 }
 
 // generic basic html/regex extraction
 
-interface ITagMatch {
+interface TagMatch {
   after: string;
   content: string;
 }
@@ -50,7 +50,7 @@ const getEndTag = (
   beginningPattern: RegExp,
   searchPattern: RegExp,
   startTag: string,
-): ITagMatch | undefined => {
+): TagMatch | undefined => {
   let match = report.match(beginningPattern);
   if (match === null || match.index === undefined) {
     return undefined;
@@ -86,7 +86,7 @@ const getElementList = (
   moreElementsTestPattern: RegExp,
 ): string[] => {
   const elements: string[] = [];
-  let tagMatch: ITagMatch | undefined;
+  let tagMatch: TagMatch | undefined;
   let leftover = report;
   while (moreElementsTestPattern.test(leftover)) {
     tagMatch = getEndTag(leftover, beginningPattern, searchPattern, startTag);
@@ -169,7 +169,7 @@ const tableDataPattern = /<td.+<\/td>/;
 const getMarksFromRow = (
   uid: string,
   tableRow: string,
-): IMark[] => {
+): Mark[] => {
   const parts = getElementList(
     tableRow,
     /<td/,
@@ -187,7 +187,7 @@ const getMarksFromRow = (
   }
   const rowName = nameMatch[1].trim();
 
-  const marks: IMark[] = [];
+  const marks: Mark[] = [];
 
   let colourMatch: RegExpMatchArray | null;
   let strand: StrandString | undefined;
@@ -234,7 +234,7 @@ const getMarksFromRow = (
 const getMarksFromReport = (
   uid: string,
   report: string,
-): IMark[] | undefined => {
+): Mark[] | undefined => {
   const assessmentTableMatch = getEndTag(
     report,
     /table border="1" cellpadding="3" cellspacing="0" width="100%">/,
@@ -257,7 +257,7 @@ const getMarksFromReport = (
   );
   rows.shift();
 
-  const marks: IMark[] = [];
+  const marks: Mark[] = [];
 
   for (const row of rows) {
     marks.push(...getMarksFromRow(uid, row));
@@ -270,10 +270,10 @@ export const getCourse = (
   reportPage: string,
   date: string,
   uid: string,
-): ICourse => {
+): Course => {
   let name: string | undefined;
   let weights: number[] | undefined;
-  let assessments: IMark[] | undefined;
+  let assessments: Mark[] | undefined;
 
   try {
     name = getName(reportPage);
@@ -306,13 +306,13 @@ export const getCourse = (
 const idMatcher = /<a href="viewReport.php\?subject_id=([0-9]+)&student_id=([0-9]+)">/;
 const dateMatcher = /(\d\d\d\d-\d\d)-\d\d/;
 
-interface IHomepageCourseInfo {
+interface HomepageCourseInfo {
   courseId: string;
   studentId: string;
   date: string;
 }
 
-export const parseHomePage = (homePage: string): IHomepageCourseInfo[] => {
+export const parseHomePage = (homePage: string): HomepageCourseInfo[] => {
   let courseRows = getEndTag(
     homePage,
     /<tr bgcolor="#(?:dd|ee)ffff">/,
@@ -323,7 +323,7 @@ export const parseHomePage = (homePage: string): IHomepageCourseInfo[] => {
     throw new Error(`No open reports found:\n${homePage}`);
   }
 
-  const courses: IHomepageCourseInfo[] = [];
+  const courses: HomepageCourseInfo[] = [];
 
   while (courseRows !== undefined) {
     const id = courseRows.content.match(idMatcher);
@@ -351,7 +351,7 @@ export const parseHomePage = (homePage: string): IHomepageCourseInfo[] => {
   return courses;
 };
 
-export const calculateCourseMark = (course: ICourse): ICourseAverage => {
+export const calculateCourseMark = (course: Course): CourseAverage => {
   if (course.assessments === undefined || course.assessments.length === 0) {
     return {
       strands: [undefined, undefined, undefined, undefined, undefined],
@@ -359,7 +359,7 @@ export const calculateCourseMark = (course: ICourse): ICourseAverage => {
     };
   }
 
-  const strands = new Map<StrandString, IMark[]>([
+  const strands = new Map<StrandString, Mark[]>([
     ["k", []], ["t", []], ["c", []], ["a", []], ["f", []],
   ]);
 

@@ -1,4 +1,4 @@
-import { IUser } from "./db";
+import { User } from "./db";
 import { admin } from "./firebase";
 
 const fcm = admin.messaging();
@@ -41,7 +41,7 @@ export const sendMessage = async (
 };
 
 export const buildMessage = (
-  user: IUser,
+  user: User,
   title: string,
   body: string,
 ): admin.messaging.MulticastMessage => ({

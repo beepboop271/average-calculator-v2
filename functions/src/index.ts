@@ -16,28 +16,28 @@ import {
   getUsers,
   handleCourseChange,
   handleStudentChange,
-  IUser,
+  User,
   writeFcmTokens,
   WritePromise,
 } from "./db";
 import { buildMessage, sendMessage } from "./notifications";
 import { getFromTa } from "./taFetcher";
-import { calculateCourseMark, ICourse } from "./taParser";
+import { calculateCourseMark, Course } from "./taParser";
 
-interface IUserData {
-  course: ICourse;
+interface UserData {
+  course: Course;
   courseChange?: CourseChange;
   studentChange?: CourseStudentChange;
 }
 
-const fetchUserData = async (user: IUser): Promise<IUserData[]> => {
+const fetchUserData = async (user: User): Promise<UserData[]> => {
   const taCourses = await getFromTa(user);
   const dbCourses = await getCourses(
     taCourses.map((course): string => course.hash),
   );
   const dbStudentDocs = await getStudentDocs(user, dbCourses);
 
-  return taCourses.map((course, i): IUserData => ({
+  return taCourses.map((course, i): UserData => ({
     course,
     courseChange: compareCourse(course, dbCourses[i]),
     studentChange: compareCourseStudent(
@@ -49,7 +49,7 @@ const fetchUserData = async (user: IUser): Promise<IUserData[]> => {
 const processUser = async (
   doc: FirebaseFirestore.QueryDocumentSnapshot,
 ): Promise<WritePromise[]> => {
-  const user: IUser = doc.data() as IUser;
+  const user: User = doc.data() as User;
   if (doc.exists) {
     console.log(`retrieving user ${user.username}`);
 

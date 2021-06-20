@@ -1,10 +1,10 @@
 import { CourseChange, CourseStudentChange, isDelete } from "./compare";
 import { admin } from "./firebase";
-import { ICourse } from "./taParser";
+import { Course } from "./taParser";
 
 const db = admin.firestore();
 
-export interface IUser {
+export interface User {
   username: string;
   password: string;
   uid: string;
@@ -12,7 +12,7 @@ export interface IUser {
   courses: string[];
 }
 
-export interface ICourseStudent {
+export interface CourseStudent {
   markHashes: string[];
 }
 
@@ -38,12 +38,12 @@ export const checkEvent = async (eventId: string): WritePromise => {
     .set({ id: eventId });
 };
 
-export interface IFcmTokenResult {
+export interface FcmTokenResult {
   devices: string[];
   ref: DocumentRef;
 }
 
-export const getFcmTokens = async (uid: string): Promise<IFcmTokenResult> => {
+export const getFcmTokens = async (uid: string): Promise<FcmTokenResult> => {
   const user = await db
     .collection("users")
     .where("uid", "==", uid)
@@ -60,7 +60,7 @@ export const getFcmTokens = async (uid: string): Promise<IFcmTokenResult> => {
   };
 };
 
-export const writeFcmTokens = async (data: IFcmTokenResult): WritePromise =>
+export const writeFcmTokens = async (data: FcmTokenResult): WritePromise =>
   data.ref.update({ devices: data.devices });
 
 export const getUsers = async (): Promise<FirebaseFirestore.QuerySnapshot> => {
@@ -82,7 +82,7 @@ export const getCourses = async (
   ));
 
 export const getStudentDocs = async (
-  user: IUser,
+  user: User,
   courses: DocumentSnapshot[],
 ): Promise<DocumentSnapshot[]> =>
   Promise.all(courses.map(
@@ -116,7 +116,7 @@ export const handleStudentChange = (
 
 const updateCourse = (
   courseRef: DocumentRef,
-  course: ICourse,
+  course: Course,
 ): WritePromise =>
   courseRef.set({
     date: course.date,

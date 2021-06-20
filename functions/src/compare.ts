@@ -1,66 +1,66 @@
-import type { ICourseStudent } from "./db";
-import type { ICourse, IMark } from "./taParser";
+import type { CourseStudent } from "./db";
+import type { Course, Mark } from "./taParser";
 
-interface IChangeBase {
+interface ChangeBase {
   path: FirebaseFirestore.DocumentReference;
   exists: boolean;
 }
 
-interface IDeleteChange extends IChangeBase {
+interface DeleteChange extends ChangeBase {
   updated: undefined;
   exists: true;
 }
 
-interface ICreateChange<T> extends IChangeBase {
+interface CreateChange<T> extends ChangeBase {
   updated: T;
   exists: false;
 }
 
-interface IUpdateChange<T> extends IChangeBase {
+interface UpdateChange<T> extends ChangeBase {
   updated: T;
   exists: true;
 }
 
-type AdditiveChange<T> = IUpdateChange<T> | ICreateChange<T>;
+type AdditiveChange<T> = UpdateChange<T> | CreateChange<T>;
 
-type Change<T> = AdditiveChange<T> | IDeleteChange;
+type Change<T> = AdditiveChange<T> | DeleteChange;
 
 export const isDelete = <T>(
   change: Change<T>,
-): change is IDeleteChange =>
-  (change as IUpdateChange<T>).updated === undefined;
+): change is DeleteChange =>
+  (change as UpdateChange<T>).updated === undefined;
 
 export const isCreate = <T>(
   change: Change<T>,
-): change is ICreateChange<T> => {
-  const update: ICreateChange<T> = change as ICreateChange<T>;
+): change is CreateChange<T> => {
+  const update: CreateChange<T> = change as CreateChange<T>;
 
   return update.updated !== undefined && !update.exists;
 };
 
 export const isUpdate = <T>(
   change: Change<T>,
-): change is IUpdateChange<T> => {
-  const update: IUpdateChange<T> = change as IUpdateChange<T>;
+): change is UpdateChange<T> => {
+  const update: UpdateChange<T> = change as UpdateChange<T>;
 
   return update.updated !== undefined && update.exists;
 };
 
-export type CourseChange = AdditiveChange<ICourse>;
+export type CourseChange = AdditiveChange<Course>;
 
-export type MarkChange = ICreateChange<IMark> | IDeleteChange;
+export type MarkChange = CreateChange<Mark> | DeleteChange;
 
-interface ICourseStudentChange {
-  course: ICourse;
+interface CourseStudentChangeMixin {
+  course: Course;
   assessmentChanges: MarkChange[];
 }
 
 export type CourseStudentChange =
-  AdditiveChange<ICourseStudent>
-  & ICourseStudentChange;
+  AdditiveChange<CourseStudent>
+  & CourseStudentChangeMixin;
 
 const checkWeightChange = (
-  taCourse: ICourse,
+  taCourse: Course,
   dbCourseDoc: FirebaseFirestore.DocumentSnapshot,
 ): boolean => {
   if (dbCourseDoc.exists) {
@@ -73,7 +73,7 @@ const checkWeightChange = (
       return false;
     }
 
-    const dbCourse = dbCourseDoc.data() as ICourse;
+    const dbCourse = dbCourseDoc.data() as Course;
     if (
       dbCourse.weights === undefined
       || dbCourse.weights.length !== taCourse.weights.length
@@ -107,13 +107,13 @@ const setLikeDifference = <K, T extends SetLike<K>>(a: T, b: SetLike<K>): T => {
 };
 
 const getAssessmentChanges = (
-  course: ICourse,
+  course: Course,
   dbStudentDoc: FirebaseFirestore.DocumentSnapshot,
   assessmentsRef: FirebaseFirestore.CollectionReference,
 ): CourseStudentChange => {
   const assessments = course.assessments ?? [];
 
-  const taMap: Map<string, IMark> = new Map();  // for comparisons
+  const taMap: Map<string, Mark> = new Map();  // for comparisons
   const updatedHashes: Set<string> = new Set();  // for return value
   for (const mark of assessments) {
     taMap.set(mark.hash, mark);
@@ -137,7 +137,7 @@ const getAssessmentChanges = (
     };
   }
 
-  const dbHashes = new Set((dbStudentDoc.data() as ICourseStudent).markHashes);
+  const dbHashes = new Set((dbStudentDoc.data() as CourseStudent).markHashes);
 
   const hashesToRemove = setLikeDifference(dbHashes, taMap);
   const marksToAdd = setLikeDifference(taMap, dbHashes);
@@ -172,7 +172,7 @@ const getAssessmentChanges = (
 };
 
 export const compareCourse = (
-  taCourse: ICourse,
+  taCourse: Course,
   dbCourseDoc: FirebaseFirestore.DocumentSnapshot,
 ): CourseChange | undefined => {
   if (checkWeightChange(taCourse, dbCourseDoc)) {
@@ -187,7 +187,7 @@ export const compareCourse = (
 };
 
 export const compareCourseStudent = (
-  taCourse: ICourse,
+  taCourse: Course,
   dbCourseDoc: FirebaseFirestore.DocumentSnapshot,
   dbStudentDoc: FirebaseFirestore.DocumentSnapshot,
 ): CourseStudentChange | undefined => {
