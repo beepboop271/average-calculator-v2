@@ -38,6 +38,31 @@ export const checkEvent = async (eventId: string): WritePromise => {
     .set({ id: eventId });
 };
 
+export interface IFcmTokenResult {
+  devices: string[];
+  ref: DocumentRef;
+}
+
+export const getFcmTokens = async (uid: string): Promise<IFcmTokenResult> => {
+  const user = await db
+    .collection("users")
+    .where("uid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (user.empty) {
+    throw new Error("no such user");
+  }
+
+  return {
+    devices: user.docs[0].get("devices") as string[],
+    ref: user.docs[0].ref,
+  };
+};
+
+export const writeFcmTokens = async (data: IFcmTokenResult): WritePromise =>
+  data.ref.update({ devices: data.devices });
+
 export const getUsers = async (): Promise<FirebaseFirestore.QuerySnapshot> => {
   const users = await db.collection("users").get();
 
@@ -79,7 +104,8 @@ export const handleStudentChange = (
 
   for (const markChange of change.assessmentChanges) {
     if (isDelete(markChange)) {
-      ops.push(markChange.path.delete());
+      // don't delete the old mark (for reference)
+      // ops.push(markChange.path.delete());
     } else {
       ops.push(markChange.path.set(markChange.updated));
     }
