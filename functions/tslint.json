@@ -20,10 +20,14 @@
     // always active
     "increment-decrement": false,
     "linebreak-style": false,  // git takes care of this
+    "match-default-export-name": false,
     "max-classes-per-file": false,
     "member-ordering": [true, { "order": "fields-first" }],
+    "newline-before-return": false,  // writer's judgement is best for this imo
     "newline-per-chained-call": false,
     "no-bitwise": false,
+    "no-object-literal-type-assertion": [true, { "allow-arguments": true }],  // lol schema is wrong, this works fine
+    "semicolon": [true, "always"],
     "switch-default": false,
     "trailing-comma": [
       true,
@@ -37,7 +41,20 @@
       "call-signature",
       "arrow-call-signature"
     ],
-    "variable-name": [true, "allow-leading-underscore"]
+    "variable-name": [true, "allow-leading-underscore"],
+    "whitespace": [  // all except check-operator
+      true,
+      "check-branch",
+      "check-decl",
+      "check-module",
+      "check-separator",
+      "check-rest-spread",
+      "check-type",
+      "check-typecast",
+      "check-type-operator",
+      "check-preblock",
+      "check-postbrace"
+    ]
   },
   "rulesDirectory": []
 }
