@@ -7,6 +7,7 @@ interface IChangeBase {
 }
 
 interface IDeleteChange extends IChangeBase {
+  updated: undefined;
   exists: true;
 }
 
@@ -20,7 +21,9 @@ interface IUpdateChange<T> extends IChangeBase {
   exists: true;
 }
 
-type Change<T> = IUpdateChange<T> | ICreateChange<T> | IDeleteChange;
+type AdditiveChange<T> = IUpdateChange<T> | ICreateChange<T>;
+
+type Change<T> = AdditiveChange<T> | IDeleteChange;
 
 export const isDelete = <T>(
   change: Change<T>,
@@ -43,9 +46,9 @@ export const isUpdate = <T>(
   return update.updated !== undefined && update.exists;
 };
 
-export type CourseChange = IUpdateChange<ICourse> | ICreateChange<ICourse>;
+export type CourseChange = AdditiveChange<ICourse>;
 
-export type MarkChange = Change<IMark>;
+export type MarkChange = ICreateChange<IMark> | IDeleteChange;
 
 interface ICourseStudentChange {
   course: ICourse;
@@ -53,7 +56,7 @@ interface ICourseStudentChange {
 }
 
 export type CourseStudentChange =
-  (IUpdateChange<ICourseStudent> | ICreateChange<ICourseStudent>)
+  AdditiveChange<ICourseStudent>
   & ICourseStudentChange;
 
 const checkWeightChange = (
@@ -92,17 +95,10 @@ const checkWeightChange = (
 
 type SetLike<K> = Set<K> | Map<K, unknown>;
 
-const setDifference = <K>(a: SetLike<K>, b: SetLike<K>): Set<K> => {
-  const difference = new Set(a.keys());
-  for (const val of b.keys()) {
-    difference.delete(val);
-  }
-
-  return difference;
-};
-
-const mapDifference = <K, V>(a: Map<K, V>, b: SetLike<K>): Map<K, V> => {
-  const difference = new Map(a);
+const setLikeDifference = <K, T extends SetLike<K>>(a: T, b: SetLike<K>): T => {
+  // good enough for an internal function called twice
+  // tslint:disable-next-line:no-any
+  const difference = new (a.constructor as any)(a) as T;
   for (const val of b.keys()) {
     difference.delete(val);
   }
@@ -143,8 +139,8 @@ const getAssessmentChanges = (
 
   const dbHashes = new Set((dbStudentDoc.data() as ICourseStudent).markHashes);
 
-  const hashesToRemove = setDifference(dbHashes, taMap);
-  const marksToAdd = mapDifference(taMap, dbHashes);
+  const hashesToRemove = setLikeDifference(dbHashes, taMap);
+  const marksToAdd = setLikeDifference(taMap, dbHashes);
 
   const assessmentChanges: MarkChange[] = [];
 
