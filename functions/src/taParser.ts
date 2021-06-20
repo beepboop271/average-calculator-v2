@@ -33,6 +33,11 @@ export interface ICourse {
   assessments: IMark[] | undefined;
 }
 
+export interface ICourseAverage {
+  strands: Array<number | undefined>;
+  average?: number;
+}
+
 // generic basic html/regex extraction
 
 interface ITagMatch {
@@ -344,4 +349,60 @@ export const parseHomePage = (homePage: string): IHomepageCourseInfo[] => {
   }
 
   return courses;
+};
+
+export const calculateCourseMark = (course: ICourse): ICourseAverage => {
+  if (course.assessments === undefined || course.assessments.length === 0) {
+    return {
+      strands: [undefined, undefined, undefined, undefined, undefined],
+      average: undefined,
+    };
+  }
+
+  const strands = new Map<StrandString, IMark[]>([
+    ["k", []], ["t", []], ["c", []], ["a", []], ["f", []],
+  ]);
+
+  for (const mark of course.assessments) {
+    strands.get(mark.strand)?.push(mark);
+  }
+
+  const calculatedMarks: Array<number | undefined> = [];
+  let totalWeight = 0;
+  let weightedSum = 0;
+  for (const [, marks] of strands.entries()) {
+    totalWeight = 0;
+    weightedSum = 0;
+
+    for (const mark of marks) {
+      if (!(isNaN(mark.weight) || isNaN(mark.numerator) || isNaN(mark.denominator))) {
+        totalWeight += mark.weight;
+        weightedSum += (mark.numerator / mark.denominator) * mark.weight;
+      }
+    }
+
+    calculatedMarks.push(totalWeight === 0 ? undefined : weightedSum / totalWeight);
+  }
+
+  if (course.weights === undefined) {
+    return {
+      strands: calculatedMarks,
+      average: undefined,
+    };
+  }
+  const { weights } = course;
+
+  totalWeight = 0;
+  weightedSum = 0;
+  calculatedMarks.forEach((mark, i): void => {
+    if (mark !== undefined) {
+      totalWeight += weights[i];
+      weightedSum += mark * weights[i];
+    }
+  });
+
+  return {
+    strands: calculatedMarks,
+    average: totalWeight === 0 ? undefined : weightedSum / totalWeight,
+  };
 };
