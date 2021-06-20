@@ -1,18 +1,50 @@
-import { pubsub } from "firebase-functions";
+import { https, pubsub } from "firebase-functions";
 import NestedError from "nested-error-stacks";
 
-import { compareCourse, compareCourseStudent } from "./compare";
+import {
+  compareCourse,
+  compareCourseStudent,
+  CourseChange,
+  CourseStudentChange,
+  studentChangeToString,
+} from "./compare";
 import {
   checkEvent,
   getCourses,
+  getFcmTokens,
   getStudentDocs,
   getUsers,
   handleCourseChange,
   handleStudentChange,
   IUser,
+  writeFcmTokens,
   WritePromise,
 } from "./db";
+import { buildMessage, sendMessage } from "./notifications";
 import { getFromTa } from "./taFetcher";
+import { calculateCourseMark, ICourse } from "./taParser";
+
+interface IUserData {
+  course: ICourse;
+  courseChange?: CourseChange;
+  studentChange?: CourseStudentChange;
+}
+
+const fetchUserData = async (user: IUser): Promise<IUserData[]> => {
+  const taCourses = await getFromTa(user);
+  const dbCourses = await getCourses(
+    taCourses.map((course): string => course.hash),
+  );
+  const dbStudentDocs = await getStudentDocs(user, dbCourses);
+
+  return taCourses.map((course, i): IUserData => ({
+    course,
+    courseChange: compareCourse(course, dbCourses[i]),
+    studentChange: compareCourseStudent(
+      course, dbCourses[i], dbStudentDocs[i],
+    ),
+  }));
+};
 
 const processUser = async (
   doc: FirebaseFirestore.QueryDocumentSnapshot,
@@ -21,33 +53,37 @@ const processUser = async (
   if (doc.exists) {
     console.log(`retrieving user ${user.username}`);
 
-    try {
-      const taCourses = await getFromTa(user);
-      const dbCourses = await getCourses(
-        taCourses.map((course): string => course.hash),
-      );
-      const dbStudentDocs = await getStudentDocs(user, dbCourses);
+    const ops: Array<WritePromise | WritePromise[]> = [];
 
-      const ops: Array<WritePromise | WritePromise[]> = [];
+    for (const { course, courseChange, studentChange } of await fetchUserData(user)) {
+      const avg = calculateCourseMark(course);
 
-      for (let i = 0; i < taCourses.length; ++i) {
-        const courseChange = compareCourse(taCourses[i], dbCourses[i]);
-        if (courseChange !== undefined) {
-          ops.push(handleCourseChange(courseChange));
+      if (courseChange !== undefined) {
+        const tokens = await sendMessage(buildMessage(
+          user,
+          `${course.name} Weights (${avg.average})`,
+          `${course.weights?.toString()}`,
+        ));
+        if (tokens.length !== user.devices.length) {
+          ops.push(writeFcmTokens({ devices: tokens, ref: doc.ref }));
         }
-        const studentChange = compareCourseStudent(taCourses[i], dbCourses[i], dbStudentDocs[i]);
-        if (studentChange !== undefined) {
-          ops.push(handleStudentChange(studentChange));
-        }
+        ops.push(handleCourseChange(courseChange));
       }
 
-      return ops.flat();
-    } catch (e) {
-      if (e instanceof Error) {
-        throw new NestedError("Failed to retrieve data from teachassist", e);
+      if (studentChange !== undefined) {
+        const tokens = await sendMessage(buildMessage(
+          user,
+          `${course.name} (${avg.average})`,
+          `${avg.strands.toString()}\n${studentChangeToString(studentChange)}`,
+        ));
+        if (tokens.length !== user.devices.length) {
+          ops.push(writeFcmTokens({ devices: tokens, ref: doc.ref }));
+        }
+        ops.push(handleStudentChange(studentChange));
       }
-      throw new Error(`Failed to retrieve data from teachassist: ${e}`);
     }
+
+    return ops.flat();
   }
   throw new Error(`User document does not exist: ${doc.ref.path}`);
 };
@@ -84,3 +120,22 @@ export const fun = pubsub
 
     return Promise.all(users.docs.flatMap(processUser)).catch(console.error);
   });
+
+export const addFcmToken = https.onCall(
+  async (data: { token?: unknown }, ctx): WritePromise => {
+    if (ctx.auth?.uid === undefined) {
+      throw new https.HttpsError("unauthenticated", "No UID found");
+    }
+
+    if (data.token === undefined || typeof data.token !== "string") {
+      throw new https.HttpsError("invalid-argument", "invalid token");
+    }
+
+    const { devices, ref } = await getFcmTokens(ctx.auth.uid);
+    devices.push(data.token);
+
+    const verifiedDevices = await sendMessage({ tokens: devices }, true);
+
+    return writeFcmTokens({ devices: verifiedDevices, ref });
+  },
+);

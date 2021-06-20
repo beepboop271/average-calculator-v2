@@ -202,3 +202,16 @@ export const compareCourseStudent = (
 
   return undefined;
 };
+
+export const studentChangeToString = (
+  studentChange: CourseStudentChange,
+): string =>
+  studentChange.assessmentChanges
+    .map((change): string => {
+      if (isDelete(change)) {
+        return `-: ${change.path.id}`;
+      }
+      const m = change.updated;
+      return `+: ${m.strand} ${m.name} ${m.numerator}/${m.denominator} (${m.weight})`;
+    })
+    .join("\n");
